@@ -3,6 +3,10 @@
 
 const express = require('express');
 const cors = require('cors');
+line 4: const express = require('express');
+line 5: const cors = require('cors');
+line 6: const { createClient } = require('@supabase/supabase-js');  ← ADD THIS
+line 7: const stripe = ...
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_test_YOUR_KEY_HERE');
 const ETHERSCAN_KEY = 'AXVGSMJ8E546YEDAYQKXSQSX2ME4JPTPAD';
 
