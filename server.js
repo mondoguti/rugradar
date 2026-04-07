@@ -16,7 +16,6 @@ const supabase = createClient(
 );
 
 // ── CONFIG ────────────────────────────────────────────────────────────────────
-const ETHERSCAN_KEY         = process.env.ETHERSCAN_KEY         || 'YourEtherscanKeyHere';
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_YOUR_WEBHOOK_SECRET';
 const FRONTEND_URL          = process.env.FRONTEND_URL          || 'http://localhost:5500';
 
