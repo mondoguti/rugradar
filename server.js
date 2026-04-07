@@ -11,8 +11,8 @@ const PORT = process.env.PORT || 3001;
 
 // ── SUPABASE CLIENT ───────────────────────────────────────────────────────────
 const supabase = createClient(
-  process.env.SUPABASE_URL     || 'https://YOUR-PROJECT.supabase.co',
-  process.env.SUPABASE_SERVICE_KEY || 'YOUR-SERVICE-ROLE-KEY' // NOT the anon key
+  process.env.SUPABASE_URL     || 'https://pzjtninqghkiczbscolp.supabase.co',
+  process.env.SUPABASE_SERVICE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6anRuaW5xZ2hraWN6YnNjb2xwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTU4MTY5MSwiZXhwIjoyMDkxMTU3NjkxfQ.7ZymgCfQwHh4prHdUmp-ZviaBrJ-65KWfTv_YHyeSMU' // NOT the anon key
 );
 
 // ── CONFIG ────────────────────────────────────────────────────────────────────
