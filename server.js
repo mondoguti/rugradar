@@ -4,7 +4,7 @@
 const express = require('express');
 const cors = require('cors');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_test_YOUR_KEY_HERE');
-const { createClient } = require('@supabase/supabase-js');
+const ETHERSCAN_KEY = process.env.ETHERSCAN_KEY || 'AXVGSMJ8E546YEDAYQKXSQSX2ME4JPTPAD';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
