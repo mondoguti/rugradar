@@ -195,12 +195,12 @@ const TRUSTED_TOKENS = new Set([
   '0xe9e7cea3dedca5984780bafc599bd69add087d56', // BUSD
 ]);
 
-function calculateScore(goplus, honeypot, dex, etherscan, chain = 'ETH') {
+function calculateScore(goplus, honeypot, dex, etherscan, chain = 'ETH', address = '') {
   let score = 0;
   const flags = [], safe = [];
 
   // ── TRUST BYPASS — known tokens skip all scoring ──
-  const addr = (goplus?.token_address || '').toLowerCase();
+  const addr = (address || goplus?.token_address || '').toLowerCase();
   if (TRUSTED_TOKENS.has(addr) || goplus?.trust_list === '1') {
     return {
       score: 0, risk: 'LOW', flags: [],
@@ -351,7 +351,7 @@ app.post('/api/scan', async (req, res) => {
     const honeypotData = hp.status  === 'fulfilled' ? hp.value  : null;
     const dexData      = dx.status  === 'fulfilled' ? dx.value  : null;
     const ethData      = eth.status === 'fulfilled' ? eth.value : null;
-    const { score, risk, flags, safe } = calculateScore(goplusData, honeypotData, dexData, ethData, chain);
+    const { score, risk, flags, safe } = calculateScore(goplusData, honeypotData, dexData, ethData, chain, address);
     res.json({
       address, chain, chainName: chainCfg.name, score, risk, flags, safe,
       tokenInfo: {
@@ -526,7 +526,7 @@ app.post('/api/v1/scan', async (req, res) => {
     const honeypotData = hp.status  === 'fulfilled' ? hp.value  : null;
     const dexData      = dx.status  === 'fulfilled' ? dx.value  : null;
     const ethData      = eth.status === 'fulfilled' ? eth.value : null;
-    const { score, risk, flags, safe } = calculateScore(goplusData, honeypotData, dexData, ethData, chain);
+    const { score, risk, flags, safe } = calculateScore(goplusData, honeypotData, dexData, ethData, chain, address);
     res.json({
       address, chain, chainName: chainCfg.name, score, risk, flags, safe,
       tokenInfo: { name: goplusData?.token_name || dexData?.baseToken?.name || 'Unknown', symbol: goplusData?.token_symbol || dexData?.baseToken?.symbol || '???' },
