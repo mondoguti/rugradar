@@ -303,6 +303,16 @@ footer strong{color:var(--accent)}
       <div class="plan-pill plan-free" id="planBadge">FREE</div>
     </div>
 
+    <div id="whaleDash" style="display:none;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:12px;padding:1rem 1.25rem;margin-bottom:1rem">
+      <div style="font-family:var(--font-mono);font-size:10px;color:#a78bfa;letter-spacing:2px;margin-bottom:0.75rem">🐋 WHALE DASHBOARD</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a href="watchlist.html" style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600">👁 Watchlist</a>
+        <a href="bulk.html" style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600">⚡ Bulk Scanner</a>
+        <a href="api.html" style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600">🔑 API Keys</a>
+        <a onclick="openPortal()" style="background:transparent;border:1px solid var(--border2);color:var(--muted);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600">⚙ Manage Plan</a>
+      </div>
+    </div>
+
     <div class="chains">
       <button class="cpill active" onclick="setChain('ETH',this)">Ethereum</button>
       <button class="cpill" onclick="setChain('BSC',this)">BNB Chain</button>
