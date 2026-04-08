@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RugRadar — Spot Scams Before They Spot You</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#060608;--surface:#0d0d12;--surface2:#13131a;--border:#1a1a24;--border2:#252530;
+  --text:#f0f0f8;--muted:#5a5a7a;--accent:#ff3b3b;--accent2:#ff6b35;--blue:#4a9eff;
+  --safe:#00d97e;--warn:#ffb800;
+  --font-display:'Syne',sans-serif;--font-mono:'JetBrains Mono',monospace;--font-body:'Inter',sans-serif;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);overflow-x:hidden}
+
+/* ── NAV ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:1.25rem 2rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,0.04);background:rgba(6,6,8,0.85);backdrop-filter:blur(20px)}
+.nav-logo{display:flex;align-items:center;gap:10px;font-family:var(--font-display);font-size:1.1rem;font-weight:800;letter-spacing:-0.5px}
+.nav-logo span{color:var(--accent)}
+.nav-links{display:flex;align-items:center;gap:2rem}
+.nav-links a{font-size:13px;color:var(--muted);text-decoration:none;transition:color 0.2s;cursor:pointer}
+.nav-links a:hover{color:var(--text)}
+.nav-cta{background:var(--accent);color:#fff;border:none;padding:9px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.2s}
+.nav-cta:hover{background:#e02020}
+
+/* ── HERO ── */
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8rem 2rem 4rem;position:relative;overflow:hidden}
+.hero-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,59,59,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,59,59,0.03) 1px,transparent 1px);background-size:60px 60px;animation:gridMove 20s linear infinite}
+@keyframes gridMove{0%{transform:translateY(0)}100%{transform:translateY(60px)}}
+.hero-glow{position:absolute;width:600px;height:600px;background:radial-gradient(circle,rgba(255,59,59,0.08) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(255,59,59,0.08);border:1px solid rgba(255,59,59,0.2);border-radius:100px;padding:6px 16px;font-size:12px;color:var(--accent);font-family:var(--font-mono);margin-bottom:2rem;animation:fadeUp 0.6s ease both}
+.hero-badge::before{content:'';width:6px;height:6px;background:var(--accent);border-radius:50%;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(0.8)}}
+.hero h1{font-family:var(--font-display);font-size:clamp(2.5rem,7vw,5.5rem);font-weight:800;line-height:1.05;letter-spacing:-2px;margin-bottom:1.5rem;animation:fadeUp 0.6s 0.1s ease both;opacity:0}
+.hero h1 .line2{color:var(--accent)}
+.hero-sub{font-size:1.1rem;color:var(--muted);max-width:520px;line-height:1.7;margin-bottom:2.5rem;animation:fadeUp 0.6s 0.2s ease both;opacity:0}
+.hero-actions{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;animation:fadeUp 0.6s 0.3s ease both;opacity:0}
+.btn-primary{background:var(--accent);color:#fff;border:none;padding:14px 28px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.2s;display:flex;align-items:center;gap:8px}
+.btn-primary:hover{background:#e02020;transform:translateY(-1px)}
+.btn-secondary{background:transparent;color:var(--text);border:1px solid var(--border2);padding:14px 28px;border-radius:10px;font-size:15px;font-weight:500;cursor:pointer;font-family:var(--font-body);transition:all 0.2s}
+.btn-secondary:hover{border-color:var(--muted)}
+.hero-stats{display:flex;gap:3rem;margin-top:4rem;animation:fadeUp 0.6s 0.4s ease both;opacity:0}
+.hstat{text-align:center}
+.hstat-num{font-family:var(--font-mono);font-size:1.8rem;font-weight:700;color:var(--text);display:block}
+.hstat-label{font-size:12px;color:var(--muted);margin-top:4px}
+@keyframes fadeUp{0%{opacity:0;transform:translateY(20px)}100%{opacity:1;transform:translateY(0)}}
+
+/* ── RADAR ANIMATION ── */
+.radar-wrap{position:relative;width:80px;height:80px;margin:0 auto 2rem}
+.radar-ring{position:absolute;border-radius:50%;border:1px solid rgba(255,59,59,0.2)}
+.radar-ring:nth-child(1){width:80px;height:80px;top:0;left:0}
+.radar-ring:nth-child(2){width:54px;height:54px;top:13px;left:13px;border-color:rgba(255,59,59,0.35)}
+.radar-ring:nth-child(3){width:28px;height:28px;top:26px;left:26px;border-color:rgba(255,59,59,0.6)}
+.radar-sweep{position:absolute;width:40px;height:1px;background:linear-gradient(to right,transparent,var(--accent));top:50%;left:50%;transform-origin:left center;animation:sweep 3s linear infinite}
+@keyframes sweep{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.radar-dot{position:absolute;width:6px;height:6px;background:var(--accent);border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%)}
+
+/* ── STATS BAR ── */
+.stats-bar{background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:1.5rem 2rem;display:flex;justify-content:center;gap:4rem;flex-wrap:wrap}
+.sbar-item{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+.sbar-num{font-family:var(--font-mono);font-size:1rem;font-weight:700;color:var(--text)}
+.sbar-dot{width:8px;height:8px;border-radius:50%;background:var(--safe)}
+
+/* ── HOW IT WORKS ── */
+.section{padding:6rem 2rem;max-width:1100px;margin:0 auto}
+.section-label{font-family:var(--font-mono);font-size:11px;color:var(--accent);letter-spacing:3px;text-transform:uppercase;margin-bottom:1rem}
+.section-title{font-family:var(--font-display);font-size:clamp(1.8rem,4vw,3rem);font-weight:800;letter-spacing:-1px;margin-bottom:1rem}
+.section-sub{font-size:1rem;color:var(--muted);max-width:500px;line-height:1.7}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:2rem;margin-top:3rem}
+.step{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:2rem;position:relative;overflow:hidden;transition:border-color 0.2s}
+.step:hover{border-color:var(--border2)}
+.step-num{font-family:var(--font-mono);font-size:3rem;font-weight:700;color:rgba(255,59,59,0.12);position:absolute;top:1rem;right:1.25rem;line-height:1}
+.step-icon{width:44px;height:44px;background:rgba(255,59,59,0.08);border:1px solid rgba(255,59,59,0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:1.25rem;font-size:20px}
+.step h3{font-family:var(--font-display);font-size:1.1rem;font-weight:700;margin-bottom:0.5rem}
+.step p{font-size:14px;color:var(--muted);line-height:1.6}
+
+/* ── SCANNER ── */
+.scanner-section{background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:5rem 2rem;scroll-margin-top:80px}
+.scanner-inner{max-width:760px;margin:0 auto}
+.scanner-header{text-align:center;margin-bottom:3rem}
+.email-row{display:flex;gap:10px;margin-bottom:1.25rem;align-items:center}
+.email-row input{flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px 16px;font-family:var(--font-body);font-size:14px;color:var(--text);outline:none;transition:border-color 0.2s}
+.email-row input:focus{border-color:var(--accent)}
+.email-row input::placeholder{color:var(--muted)}
+.plan-pill{font-family:var(--font-mono);font-size:11px;font-weight:700;padding:5px 14px;border-radius:100px;white-space:nowrap;letter-spacing:1px}
+.plan-free{background:rgba(255,255,255,0.06);color:var(--muted);border:1px solid var(--border2)}
+.plan-pro{background:rgba(74,158,255,0.12);color:#4a9eff;border:1px solid rgba(74,158,255,0.25)}
+.plan-whale{background:rgba(139,92,246,0.12);color:#a78bfa;border:1px solid rgba(139,92,246,0.25)}
+.chains{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem}
+.cpill{font-size:12px;font-weight:500;padding:6px 16px;border-radius:100px;border:1px solid var(--border2);cursor:pointer;background:transparent;color:var(--muted);transition:all 0.15s;font-family:var(--font-body)}
+.cpill:hover{border-color:var(--muted);color:var(--text)}
+.cpill.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.scan-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;color:var(--muted)}
+.search-row{display:flex;gap:10px;margin-bottom:2rem}
+.search-row input{flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px 18px;font-family:var(--font-mono);font-size:13px;color:var(--text);outline:none;transition:border-color 0.2s}
+.search-row input:focus{border-color:var(--accent)}
+.search-row input::placeholder{color:var(--muted);font-family:var(--font-body)}
+.scan-btn{background:var(--accent);border:none;border-radius:10px;padding:14px 24px;color:#fff;font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap;font-family:var(--font-display);letter-spacing:0.5px;transition:all 0.2s}
+.scan-btn:hover{background:#e02020}
+.scan-btn:disabled{background:var(--border2);color:var(--muted);cursor:not-allowed}
+
+/* ── RESULT CARD ── */
+.result-card{background:var(--bg);border:1px solid var(--border2);border-radius:16px;overflow:hidden;margin-bottom:1rem}
+.result-header{padding:1.5rem;display:flex;align-items:flex-start;gap:1.25rem}
+.risk-badge{font-family:var(--font-mono);font-size:11px;font-weight:700;padding:4px 14px;border-radius:6px;letter-spacing:2px;display:inline-block;margin-bottom:10px}
+.badge-HIGH{background:rgba(255,59,59,0.12);color:#ff6b6b;border:1px solid rgba(255,59,59,0.25)}
+.badge-MEDIUM{background:rgba(255,184,0,0.12);color:#ffd060;border:1px solid rgba(255,184,0,0.25)}
+.badge-LOW{background:rgba(0,217,126,0.12);color:#00d97e;border:1px solid rgba(0,217,126,0.25)}
+.token-name{font-family:var(--font-display);font-size:1.3rem;font-weight:700;margin-bottom:4px}
+.token-addr{font-family:var(--font-mono);font-size:11px;color:var(--muted);word-break:break-all}
+.score-box{margin-left:auto;text-align:center;flex-shrink:0}
+.score-num{font-family:var(--font-mono);font-size:2.5rem;font-weight:700;line-height:1}
+.score-sub{font-size:10px;color:var(--muted);letter-spacing:2px;margin-top:4px;text-transform:uppercase}
+.score-HIGH{color:#ff6b6b}.score-MEDIUM{color:#ffd060}.score-LOW{color:#00d97e}
+.divider{border:none;border-top:1px solid var(--border)}
+.checks{display:grid;grid-template-columns:1fr 1fr}
+.check{padding:14px 18px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--border);border-right:1px solid var(--border)}
+.check:nth-child(2n){border-right:none}
+.check:nth-last-child(-n+2){border-bottom:none}
+.ci{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;margin-top:1px}
+.ci-fail{background:rgba(255,59,59,0.15);color:#ff6b6b}
+.ci-warn{background:rgba(255,184,0,0.15);color:#ffd060}
+.ci-safe{background:rgba(0,217,126,0.15);color:#00d97e}
+.check-label{font-size:13px;font-weight:600;margin-bottom:3px}
+.check-desc{font-size:12px;color:var(--muted);line-height:1.5}
+.market-row{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--border)}
+.mst{padding:14px 18px;border-right:1px solid var(--border)}
+.mst:last-child{border-right:none}
+.mst-label{font-size:11px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:1px}
+.mst-val{font-family:var(--font-mono);font-size:15px;font-weight:700}
+.up{color:#00d97e}.down{color:#ff6b6b}
+.summary-bar{padding:1.25rem 1.5rem;background:rgba(255,255,255,0.02);font-size:13px;color:var(--muted);line-height:1.7;border-top:1px solid var(--border)}
+.summary-bar strong{color:var(--text)}
+.sources-row{padding:10px 18px;display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid var(--border)}
+.src{font-size:11px;padding:3px 10px;border-radius:100px;font-family:var(--font-mono)}
+.src-on{background:rgba(0,217,126,0.08);color:#00d97e;border:1px solid rgba(0,217,126,0.2)}
+.src-off{background:rgba(255,255,255,0.04);color:var(--muted);border:1px solid var(--border)}
+.loading{text-align:center;padding:3rem;color:var(--muted)}
+.spinner{width:36px;height:36px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 1rem}
+@keyframes spin{to{transform:rotate(360deg)}}
+.placeholder{text-align:center;padding:3rem 1rem}
+.placeholder-icon{margin-bottom:1rem;opacity:0.2}
+.placeholder p{font-size:14px;color:var(--muted);line-height:1.7}
+.error-box{background:rgba(255,59,59,0.06);border:1px solid rgba(255,59,59,0.2);border-radius:12px;padding:1.5rem}
+.error-title{font-weight:600;color:#ff6b6b;margin-bottom:6px}
+.error-desc{font-size:13px;color:var(--muted)}
+
+/* ── PRICING ── */
+.pricing-section{padding:6rem 2rem;max-width:1100px;margin:0 auto}
+.pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;margin-top:3rem}
+.price-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:2rem;position:relative;overflow:hidden;transition:all 0.2s}
+.price-card:hover{border-color:var(--border2)}
+.price-card.popular{border-color:var(--accent)}
+.popular-badge{position:absolute;top:1.25rem;right:1.25rem;background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:4px 10px;border-radius:100px;font-family:var(--font-mono);letter-spacing:1px}
+.price-tier{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-bottom:1rem}
+.price-amount{font-family:var(--font-display);font-size:2.5rem;font-weight:800;letter-spacing:-1px;margin-bottom:4px}
+.price-period{font-size:13px;color:var(--muted);margin-bottom:1.5rem}
+.price-divider{border:none;border-top:1px solid var(--border);margin-bottom:1.5rem}
+.price-features{list-style:none;margin-bottom:2rem}
+.price-features li{font-size:14px;color:var(--muted);padding:6px 0;display:flex;align-items:center;gap:10px}
+.price-features li::before{content:'';width:16px;height:16px;background:rgba(0,217,126,0.15);border:1px solid rgba(0,217,126,0.3);border-radius:50%;flex-shrink:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 8L6.5 11.5L13 5' stroke='%2300d97e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-size:contain;background-repeat:no-repeat;background-position:center}
+.price-btn{width:100%;padding:13px;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;font-family:var(--font-display);transition:all 0.2s;border:none;letter-spacing:0.5px}
+.btn-ghost{background:transparent;border:1px solid var(--border2)!important;color:var(--muted)}
+.btn-red{background:var(--accent);color:#fff}
+.btn-red:hover{background:#e02020}
+.btn-purple{background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff}
+.btn-purple:hover{opacity:0.9}
+.manage-link{text-align:center;margin-top:1.5rem;font-size:13px;color:var(--muted)}
+.manage-link a{color:var(--blue);cursor:pointer}
+
+/* ── FEATURES ── */
+.features-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1.5rem;margin-top:3rem}
+.feat{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:1.75rem;transition:border-color 0.2s}
+.feat:hover{border-color:var(--border2)}
+.feat-icon{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:1rem;font-size:22px}
+.feat-icon.red{background:rgba(255,59,59,0.08);border:1px solid rgba(255,59,59,0.15)}
+.feat-icon.blue{background:rgba(74,158,255,0.08);border:1px solid rgba(74,158,255,0.15)}
+.feat-icon.green{background:rgba(0,217,126,0.08);border:1px solid rgba(0,217,126,0.15)}
+.feat-icon.yellow{background:rgba(255,184,0,0.08);border:1px solid rgba(255,184,0,0.15)}
+.feat h3{font-family:var(--font-display);font-size:1rem;font-weight:700;margin-bottom:0.5rem}
+.feat p{font-size:13px;color:var(--muted);line-height:1.6}
+
+/* ── FOOTER ── */
+footer{border-top:1px solid var(--border);padding:2rem;text-align:center;font-size:13px;color:var(--muted)}
+footer strong{color:var(--accent)}
+
+/* ── RESPONSIVE ── */
+@media(max-width:768px){
+  .steps{grid-template-columns:1fr}
+  .pricing-grid{grid-template-columns:1fr}
+  .features-grid{grid-template-columns:1fr}
+  .checks{grid-template-columns:1fr}
+  .check{border-right:none}
+  .check:nth-last-child(-n+2){border-bottom:1px solid var(--border)}
+  .check:last-child{border-bottom:none}
+  .market-row{grid-template-columns:1fr}
+  .mst{border-right:none;border-bottom:1px solid var(--border)}
+  .mst:last-child{border-bottom:none}
+  .hero-stats{gap:1.5rem}
+  .stats-bar{gap:2rem}
+  nav{padding:1rem}
+  .nav-links{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">
+    <svg width="24" height="24" viewBox="0 0 36 36" fill="none">
+      <circle cx="18" cy="18" r="17" stroke="#ff3b3b" stroke-width="1.5" opacity="0.3"/>
+      <circle cx="18" cy="18" r="11" stroke="#ff3b3b" stroke-width="1.5" opacity="0.5"/>
+      <circle cx="18" cy="18" r="5" stroke="#ff3b3b" stroke-width="1.5"/>
+      <line x1="18" y1="1" x2="18" y2="18" stroke="#ff3b3b" stroke-width="1.5" opacity="0.6"/>
+      <line x1="18" y1="18" x2="30" y2="10" stroke="#ff3b3b" stroke-width="2" stroke-linecap="round">
+        <animateTransform attributeName="transform" type="rotate" from="0 18 18" to="360 18 18" dur="3s" repeatCount="indefinite"/>
+      </line>
+      <circle cx="18" cy="18" r="2" fill="#ff3b3b"/>
+    </svg>
+    RUG<span>RADAR</span>
+  </div>
+  <div class="nav-links">
+    <a onclick="document.getElementById('scanner').scrollIntoView({behavior:'smooth'})">Scanner</a>
+    <a onclick="document.getElementById('features').scrollIntoView({behavior:'smooth'})">Features</a>
+    <a onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">Pricing</a>
+  </div>
+  <button class="nav-cta" onclick="document.getElementById('scanner').scrollIntoView({behavior:'smooth'})">Scan Token Free</button>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-glow"></div>
+  <div class="hero-badge">🛡 Real-time Web3 Security</div>
+  <h1>Spot Scams<br><span class="line2">Before They</span><br>Spot You</h1>
+  <p class="hero-sub">Scan any token contract in seconds. Get real risk scores from 4 live security APIs before you invest a single dollar.</p>
+  <div class="hero-actions">
+    <button class="btn-primary" onclick="document.getElementById('scanner').scrollIntoView({behavior:'smooth'})">
+      <svg width="16" height="16" viewBox="0 0 36 36" fill="none"><circle cx="18" cy="18" r="17" stroke="white" stroke-width="2" opacity="0.5"/><circle cx="18" cy="18" r="5" stroke="white" stroke-width="2"/></svg>
+      Scan a Token Free
+    </button>
+    <button class="btn-secondary" onclick="document.getElementById('how').scrollIntoView({behavior:'smooth'})">How it works →</button>
+  </div>
+  <div class="hero-stats">
+    <div class="hstat"><span class="hstat-num">$17B+</span><div class="hstat-label">Lost to scams in 2025</div></div>
+    <div class="hstat"><span class="hstat-num">60+</span><div class="hstat-label">Chains supported</div></div>
+    <div class="hstat"><span class="hstat-num">4</span><div class="hstat-label">Live security APIs</div></div>
+    <div class="hstat"><span class="hstat-num">3s</span><div class="hstat-label">Average scan time</div></div>
+  </div>
+</section>
+
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="sbar-item"><span class="sbar-dot"></span><span class="sbar-num">GoPlus</span>&nbsp;717M monthly API calls</div>
+  <div class="sbar-item"><span class="sbar-dot" style="background:var(--blue)"></span><span class="sbar-num">Honeypot.is</span>&nbsp;buy/sell simulation</div>
+  <div class="sbar-item"><span class="sbar-dot" style="background:var(--warn)"></span><span class="sbar-num">DEXScreener</span>&nbsp;live market data</div>
+  <div class="sbar-item"><span class="sbar-dot" style="background:var(--muted)"></span><span class="sbar-num">Etherscan</span>&nbsp;contract verification</div>
+</div>
+
+<!-- HOW IT WORKS -->
+<div id="how">
+<div class="section">
+  <div class="section-label">How it works</div>
+  <h2 class="section-title">Three steps to stay safe</h2>
+  <p class="section-sub">No wallet connection needed. No sign up required. Just paste and scan.</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">01</div>
+      <div class="step-icon">📋</div>
+      <h3>Paste the contract</h3>
+      <p>Copy any token contract address from DEXScreener, Telegram, or wherever you found the token.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">02</div>
+      <div class="step-icon">🔍</div>
+      <h3>We scan 4 APIs</h3>
+      <p>RugRadar hits GoPlus, Honeypot.is, DEXScreener and Etherscan simultaneously and aggregates the results.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">03</div>
+      <div class="step-icon">✅</div>
+      <h3>Get your risk score</h3>
+      <p>A 0-100 risk score with detailed flags tells you exactly what's wrong — or confirms it looks safe.</p>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- SCANNER -->
+<section class="scanner-section" id="scanner">
+  <div class="scanner-inner">
+    <div class="scanner-header">
+      <div class="section-label">Free scanner</div>
+      <h2 class="section-title" style="font-size:2rem">Scan any token now</h2>
+    </div>
+
+    <div class="email-row">
+      <input id="emailInput" type="email" placeholder="Enter email to save scan history & manage plan" onblur="checkPlan()"/>
+      <div class="plan-pill plan-free" id="planBadge">FREE</div>
+    </div>
+
+    <div class="chains">
+      <button class="cpill active" onclick="setChain('ETH',this)">Ethereum</button>
+      <button class="cpill" onclick="setChain('BSC',this)">BNB Chain</button>
+      <button class="cpill" onclick="setChain('BASE',this)">Base</button>
+      <button class="cpill" onclick="setChain('ARB',this)">Arbitrum</button>
+      <button class="cpill" onclick="setChain('SOL',this)">Solana</button>
+    </div>
+
+    <div class="scan-meta">
+      <span id="scanCountLabel">Free scans today: <strong id="scanCount">0 / 3</strong></span>
+      <span id="planStatus" style="color:var(--safe);font-size:12px"></span>
+    </div>
+
+    <div class="search-row">
+      <input id="addrInput" placeholder="Paste token contract address (0x... or Solana address)" onkeydown="if(event.key==='Enter')doScan()"/>
+      <button class="scan-btn" id="scanBtn" onclick="doScan()">SCAN →</button>
+    </div>
+
+    <div id="result">
+      <div class="placeholder">
+        <div class="placeholder-icon">
+          <svg width="48" height="48" viewBox="0 0 36 36" fill="none">
+            <circle cx="18" cy="18" r="17" stroke="#ff3b3b" stroke-width="1" opacity="0.3"/>
+            <circle cx="18" cy="18" r="11" stroke="#ff3b3b" stroke-width="1" opacity="0.5"/>
+            <circle cx="18" cy="18" r="5" stroke="#ff3b3b" stroke-width="1"/>
+          </svg>
+        </div>
+        <p>Paste any token contract address above.<br>Real data from 4 security APIs in seconds.<br><br><small style="color:var(--muted);font-size:11px">Try: 0x6982508145454Ce325dDbE47a25d4ec3d2311933 (PEPE)</small></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<div id="features">
+<div class="section">
+  <div class="section-label">Features</div>
+  <h2 class="section-title">Everything you need to stay safe</h2>
+  <p class="section-sub">Built on the same APIs that power the biggest crypto security platforms.</p>
+  <div class="features-grid">
+    <div class="feat">
+      <div class="feat-icon red">🍯</div>
+      <h3>Honeypot Detection</h3>
+      <p>Simulates actual buy and sell transactions to detect if a token will trap your funds. The most critical check before buying.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon blue">💧</div>
+      <h3>Liquidity Analysis</h3>
+      <p>Checks if liquidity is locked and how much exists. Unlocked liquidity is the most common rug pull mechanism.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon green">✅</div>
+      <h3>Contract Verification</h3>
+      <p>Verifies the contract source code is publicly auditable on Etherscan. Hidden code is a major red flag.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon yellow">👥</div>
+      <h3>Holder Analysis</h3>
+      <p>Shows wallet concentration and top holder percentages. Single-wallet dominance signals easy price manipulation.</p>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- PRICING -->
+<section id="pricing" style="background:var(--surface);border-top:1px solid var(--border)">
+<div class="pricing-section">
+  <div class="section-label">Pricing</div>
+  <h2 class="section-title">Simple, honest pricing</h2>
+  <p class="section-sub">Start free. Upgrade when you need unlimited scans and advanced features.</p>
+  <div class="pricing-grid">
+    <div class="price-card">
+      <div class="price-tier">Free</div>
+      <div class="price-amount">$0</div>
+      <div class="price-period">forever</div>
+      <hr class="price-divider">
+      <ul class="price-features">
+        <li>3 scans per day</li>
+        <li>Basic risk score</li>
+        <li>Honeypot detection</li>
+        <li>4 security checks</li>
+      </ul>
+      <button class="price-btn btn-ghost" style="border:1px solid var(--border2);color:var(--muted);cursor:default">Current Plan</button>
+    </div>
+    <div class="price-card popular">
+      <div class="popular-badge">POPULAR</div>
+      <div class="price-tier" style="color:var(--accent)">Pro</div>
+      <div class="price-amount">$9.99</div>
+      <div class="price-period">per month</div>
+      <hr class="price-divider">
+      <ul class="price-features">
+        <li>Unlimited scans</li>
+        <li>Full risk breakdown</li>
+        <li>All chains supported</li>
+        <li>Scan history saved</li>
+        <li>Portfolio monitoring</li>
+        <li>Real-time alerts</li>
+      </ul>
+      <button class="price-btn btn-red" id="btnPro" onclick="startCheckout('pro')">Upgrade to Pro</button>
+    </div>
+    <div class="price-card">
+      <div class="price-tier" style="color:#a78bfa">Whale</div>
+      <div class="price-amount">$29.99</div>
+      <div class="price-period">per month</div>
+      <hr class="price-divider">
+      <ul class="price-features">
+        <li>Everything in Pro</li>
+        <li>API access</li>
+        <li>Bulk token scanning</li>
+        <li>Telegram bot alerts</li>
+        <li>Priority support</li>
+        <li>White-label option</li>
+      </ul>
+      <button class="price-btn btn-purple" id="btnWhale" onclick="startCheckout('whale')">Upgrade to Whale</button>
+    </div>
+  </div>
+  <div class="manage-link" id="manageLink" style="display:none">Already subscribed? <a onclick="openPortal()">Manage your subscription →</a></div>
+</div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <p>Built with real data. <strong>RugRadar</strong> uses GoPlus Security, Honeypot.is, DEXScreener and Etherscan APIs.<br>
+  Not financial advice. Always do your own research.</p>
+</footer>
+
+<script>
+const API = 'https://rugradar-production.up.railway.app';
+let chain = 'ETH', currentPlan = 'free';
+let scansToday = parseInt(localStorage.getItem('scans_today') || '0');
+if (localStorage.getItem('scan_date') !== new Date().toDateString()) { scansToday = 0; localStorage.setItem('scan_date', new Date().toDateString()); }
+updateCounter();
+
+function updateCounter() {
+  document.getElementById('scanCount').textContent = currentPlan !== 'free' ? '∞' : scansToday + ' / 3';
+}
+
+function setChain(c, el) {
+  chain = c;
+  document.querySelectorAll('.cpill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function getEmail() { return document.getElementById('emailInput').value.trim(); }
+
+async function checkPlan() {
+  const email = getEmail();
+  if (!email) return;
+  try {
+    const r = await fetch(`${API}/api/user/${encodeURIComponent(email)}`);
+    const d = await r.json();
+    currentPlan = d.plan;
+    const badge = document.getElementById('planBadge');
+    badge.textContent = d.plan.toUpperCase();
+    badge.className = `plan-pill plan-${d.plan}`;
+    document.getElementById('planStatus').textContent = d.plan !== 'free' ? '✓ Unlimited scans active' : '';
+    document.getElementById('manageLink').style.display = d.plan !== 'free' ? 'block' : 'none';
+    updateCounter();
+  } catch (e) {}
+}
+
+async function doScan() {
+  const address = document.getElementById('addrInput').value.trim();
+  if (!address || address.length < 10) return;
+  if (currentPlan === 'free' && scansToday >= 3) {
+    document.getElementById('result').innerHTML = `<div class="error-box"><div class="error-title">Daily limit reached</div><div class="error-desc">You've used your 3 free scans today. Upgrade to Pro for unlimited scans.</div></div>`;
+    document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+  document.getElementById('scanBtn').disabled = true;
+  document.getElementById('result').innerHTML = `<div class="loading"><div class="spinner"></div><div>Scanning ${chain} token...</div><div style="font-size:12px;margin-top:8px;opacity:0.5">GoPlus · Honeypot.is · DEXScreener · Etherscan</div></div>`;
+  try {
+    const r = await fetch(`${API}/api/scan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address, chain, email: getEmail() }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Scan failed');
+    if (currentPlan === 'free') { scansToday++; localStorage.setItem('scans_today', scansToday); updateCounter(); }
+    showResult(d);
+  } catch (err) {
+    document.getElementById('result').innerHTML = `<div class="error-box"><div class="error-title">Scan failed</div><div class="error-desc">${err.message}</div></div>`;
+  } finally {
+    document.getElementById('scanBtn').disabled = false;
+  }
+}
+
+function showResult(d) {
+  const riskLabel = d.risk === 'HIGH' ? '⚠ HIGH RISK' : d.risk === 'MEDIUM' ? '~ MEDIUM RISK' : '✓ LOW RISK';
+  const fH = d.flags.map(f => `<div class="check"><div class="ci ${f.severity === 'critical' || f.severity === 'high' ? 'ci-fail' : 'ci-warn'}">✕</div><div><div class="check-label">${f.label}</div><div class="check-desc">${f.desc}</div></div></div>`).join('');
+  const sH = d.safe.map(f => `<div class="check"><div class="ci ci-safe">✓</div><div><div class="check-label">${f.label}</div><div class="check-desc">${f.desc}</div></div></div>`).join('');
+  const mH = d.marketData ? `<div class="market-row"><div class="mst"><div class="mst-label">Price</div><div class="mst-val">$${fmt(d.marketData.priceUSD)}</div></div><div class="mst"><div class="mst-label">Liquidity</div><div class="mst-val">$${fmtK(d.marketData.liquidityUSD)}</div></div><div class="mst"><div class="mst-label">24h Change</div><div class="mst-val ${d.marketData.priceChange24h >= 0 ? 'up' : 'down'}">${d.marketData.priceChange24h >= 0 ? '+' : ''}${d.marketData.priceChange24h.toFixed(2)}%</div></div></div>` : '';
+  const sum = d.risk === 'HIGH' ? `<strong>High risk.</strong> ${d.flags.length} critical flags detected. Proceed with extreme caution or avoid entirely.` : d.risk === 'MEDIUM' ? `<strong>Proceed with caution.</strong> ${d.flags.length} concern${d.flags.length !== 1 ? 's' : ''} found. Research further before investing.` : `<strong>Looks relatively safe.</strong> No major red flags detected. Always DYOR before investing.`;
+  document.getElementById('result').innerHTML = `<div class="result-card"><div class="result-header"><div><div class="risk-badge badge-${d.risk}">${riskLabel}</div><div class="token-name">${d.tokenInfo.name} <span style="color:var(--muted);font-size:0.85em">(${d.tokenInfo.symbol})</span></div><div class="token-addr">${d.address}</div>${d.tokenInfo.holders ? `<div style="font-size:12px;color:var(--muted);margin-top:6px;font-family:var(--font-mono)">${d.tokenInfo.holders.toLocaleString()} holders · ${d.chainName}</div>` : ''}</div><div class="score-box"><div class="score-num score-${d.risk}">${d.score}</div><div class="score-sub">Risk Score</div></div></div><hr class="divider"><div class="checks">${fH}${sH}</div>${mH}<div class="summary-bar">${sum}</div><div class="sources-row">${['goplus', 'honeypot', 'dexscreener', 'etherscan'].map(s => `<span class="src ${d.sources[s] ? 'src-on' : 'src-off'}">${s} ${d.sources[s] ? '✓' : '✗'}</span>`).join('')}</div></div>`;
+}
+
+async function startCheckout(plan) {
+  const email = getEmail();
+  if (!email) { alert('Please enter your email first'); document.getElementById('emailInput').focus(); return; }
+  const btn = document.getElementById(plan === 'pro' ? 'btnPro' : 'btnWhale');
+  const orig = btn.textContent;
+  btn.textContent = 'Loading...';
+  btn.disabled = true;
+  try {
+    const r = await fetch(`${API}/api/checkout`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, plan }) });
+    const d = await r.json();
+    if (d.url) window.location.href = d.url;
+    else throw new Error(d.error || 'Checkout failed');
+  } catch (err) {
+    alert('Checkout failed: ' + err.message);
+    btn.textContent = orig;
+    btn.disabled = false;
+  }
+}
+
+async function openPortal() {
+  const email = getEmail();
+  if (!email) return;
+  try {
+    const r = await fetch(`${API}/api/portal`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+    const d = await r.json();
+    if (d.url) window.location.href = d.url;
+  } catch (err) { alert('Portal error: ' + err.message); }
+}
+
+function fmt(n) { if (!n) return '0'; if (n < 0.0001) return n.toExponential(2); if (n < 1) return n.toFixed(6); return n.toLocaleString(undefined, { maximumFractionDigits: 4 }); }
+function fmtK(n) { if (!n) return '0'; if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'; if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K'; return n.toFixed(0); }
+</script>
+</body>
+</html>
