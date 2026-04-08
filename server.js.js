@@ -175,35 +175,61 @@ async function fetchEtherscan(address, chainId) {
   } catch (e) { return null; }
 }
 
+// ── TRUST WHITELIST — known safe tokens skip scoring ──
+const TRUSTED_TOKENS = new Set([
+  // Ethereum
+  '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
+  '0xdac17f958d2ee523a2206206994597c13d831ec7', // USDT
+  '0x6b175474e89094c44da98b954eedeac495271d0f', // DAI
+  '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', // WETH
+  '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599', // WBTC
+  '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984', // UNI
+  '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9', // AAVE
+  '0x514910771af9ca656af840dff83e8264ecf986ca', // LINK
+  '0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce', // SHIB
+  '0x6982508145454ce325ddbe47a25d4ec3d2311933', // PEPE
+  // BSC
+  '0x55d398326f99059ff775485246999027b3197955', // BSC-USDT
+  '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d', // BSC-USDC
+  '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c', // WBNB
+  '0xe9e7cea3dedca5984780bafc599bd69add087d56', // BUSD
+]);
+
 function calculateScore(goplus, honeypot, dex, etherscan, chain = 'ETH') {
   let score = 0;
   const flags = [], safe = [];
 
+  // ── TRUST BYPASS — known tokens skip all scoring ──
+  const addr = (goplus?.token_address || '').toLowerCase();
+  if (TRUSTED_TOKENS.has(addr) || goplus?.trust_list === '1') {
+    return {
+      score: 0, risk: 'LOW', flags: [],
+      safe: [{ label: 'Verified Token', desc: 'This token is on the trusted list — no risk flags' }]
+    };
+  }
+
   // ── CHAIN AWARENESS ──
-  // Non-EVM chains (SOL, XRP etc) don't have full GoPlus/Honeypot support
-  // We only score what we can CONFIRM — never penalize missing data
   const isEVM = !['SOL'].includes(chain);
   const hasGoplusData = !!goplus;
   const hasHoneypotData = !!honeypot;
   const hasAnySecurityData = hasGoplusData || hasHoneypotData;
 
-  // For non-EVM chains with no security data, return neutral result
+  // Non-EVM with no data — just show DEX signals
   if (!isEVM && !hasAnySecurityData) {
-    return {
-      score: 0,
-      risk: 'LOW',
-      flags: [],
-      safe: [{ label: 'Chain Notice', desc: 'Full security scanning not available for this chain — check DEX data manually' }]
-    };
+    // Still score from DEX data (liquidity, concentration)
+    const liqUSD = parseFloat(dex?.liquidity?.usd || 0);
+    if (dex && liqUSD < 1000 && liqUSD > 0) { score += 20; flags.push({ label: 'Very Low Liquidity', desc: `$${liqUSD.toLocaleString()} — high manipulation risk`, severity: 'high' }); }
+    else if (liqUSD >= 1000) safe.push({ label: 'Liquidity', desc: `$${liqUSD.toLocaleString()}` });
+    safe.push({ label: 'Chain Notice', desc: 'Contract-level security data not available for this chain' });
+    return { score: Math.min(score, 100), risk: score >= 40 ? 'HIGH' : score >= 20 ? 'MEDIUM' : 'LOW', flags, safe };
   }
 
-  // For EVM tokens with no data at all — mild warning only
   if (isEVM && !hasAnySecurityData) {
     score += 5;
-    flags.push({ label: 'Limited Security Data', desc: 'Security APIs returned no data for this token', severity: 'medium' });
+    flags.push({ label: 'No Security Data', desc: 'Security APIs returned no data — token may be too new', severity: 'medium' });
   }
 
-  // ── HONEYPOT — only flag if CONFIRMED ──
+  // ── HONEYPOT ──
   const isHoneypot = goplus?.is_honeypot === '1' || honeypot?.honeypotResult?.isHoneypot === true;
   if (isHoneypot) {
     score += 50;
@@ -212,7 +238,13 @@ function calculateScore(goplus, honeypot, dex, etherscan, chain = 'ETH') {
     safe.push({ label: 'Honeypot Test Passed', desc: 'Token can be bought and sold freely' });
   }
 
-  // ── TAX — only if confirmed ──
+  // ── CREATOR HISTORY — strongest behavioral signal ──
+  if (goplus?.honeypot_with_same_creator === '1') {
+    score += 50;
+    flags.push({ label: 'Scam Creator', desc: 'This deployer has previously launched honeypot tokens', severity: 'critical' });
+  }
+
+  // ── TAX ──
   const buyTax  = parseFloat(goplus?.buy_tax  || honeypot?.simulationResult?.buyTax  || 0);
   const sellTax = parseFloat(goplus?.sell_tax || honeypot?.simulationResult?.sellTax || 0);
   if (sellTax > 20 || buyTax > 20)      { score += 25; flags.push({ label: 'Extreme Tax',  desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%`, severity: 'critical' }); }
@@ -220,43 +252,51 @@ function calculateScore(goplus, honeypot, dex, etherscan, chain = 'ETH') {
   else if (sellTax > 5  || buyTax > 5)  { score += 6;  flags.push({ label: 'Moderate Tax', desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%`, severity: 'medium' }); }
   else if (hasGoplusData) safe.push({ label: 'Normal Tax', desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%` });
 
-  // ── MINTABLE — only if confirmed ──
+  // ── MINTABLE ──
   const isMintable = goplus?.is_mintable === '1';
   if (isMintable) { score += 18; flags.push({ label: 'Mintable Supply', desc: 'Owner can create unlimited new tokens', severity: 'high' }); }
   else if (hasGoplusData) safe.push({ label: 'Fixed Supply', desc: 'Cannot mint new tokens' });
 
-  // ── OWNER — only if confirmed active ──
+  // ── OWNER ──
   const ownerAddr = goplus?.owner_address;
   const renounced = !ownerAddr || ownerAddr === '0x0000000000000000000000000000000000000000';
   const ownerActive = !renounced;
   if (ownerActive && hasGoplusData) { score += 15; flags.push({ label: 'Owner Active', desc: 'Contract not renounced — owner retains control', severity: 'high' }); }
   else if (hasGoplusData) safe.push({ label: 'Contract Renounced', desc: 'Owner gave up control' });
 
-  // ── LIQUIDITY LOCK — only flag if EXPLICITLY unlocked ──
-  const lpLocked = goplus?.lp_locked === '1';
-  const lpExplicitlyUnlocked = goplus?.lp_locked === '0';
-  const lpUnlocked = lpExplicitlyUnlocked;
-  if (lpLocked) {
-    safe.push({ label: 'Liquidity Locked', desc: 'LP cannot be removed — rug protected' });
-  } else if (lpExplicitlyUnlocked) {
-    score += 25;
-    flags.push({ label: 'Liquidity Unlocked', desc: 'LP tokens not locked — dev can remove all liquidity', severity: 'critical' });
+  // ── LIQUIDITY LOCK — check lp_holders array for accurate lock % ──
+  const lpHolders = goplus?.lp_holders || [];
+  const totalLpLocked = lpHolders.reduce((sum, h) => sum + (h.is_locked ? parseFloat(h.percent || 0) : 0), 0) * 100;
+  const totalLpBurned = lpHolders.reduce((sum, h) => sum + (h.is_contract && h.tag === 'Burn' ? parseFloat(h.percent || 0) : 0), 0) * 100;
+  const effectiveLpSecured = totalLpLocked + totalLpBurned;
+  const lpUnlocked = hasGoplusData && effectiveLpSecured < 50;
+
+  if (effectiveLpSecured >= 80) {
+    safe.push({ label: 'Liquidity Secured', desc: `${effectiveLpSecured.toFixed(0)}% of LP is locked or burned` });
+  } else if (effectiveLpSecured >= 50) {
+    score += 8; flags.push({ label: 'Partial LP Lock', desc: `Only ${effectiveLpSecured.toFixed(0)}% of LP secured`, severity: 'medium' });
+  } else if (hasGoplusData && lpHolders.length > 0) {
+    score += 25; flags.push({ label: 'Liquidity Unlocked', desc: `Only ${effectiveLpSecured.toFixed(0)}% of LP locked — dev can rug`, severity: 'critical' });
   } else if (hasGoplusData) {
-    score += 6;
-    flags.push({ label: 'LP Lock Status Unknown', desc: 'Cannot verify if liquidity is locked — check manually', severity: 'medium' });
+    score += 6; flags.push({ label: 'LP Lock Unverified', desc: 'Cannot confirm liquidity is locked', severity: 'medium' });
   }
 
-  // ── CONTRACT TRICKS — only if confirmed ──
+  // ── CONTRACT TRICKS ──
   if (goplus?.is_proxy === '1')                { score += 14; flags.push({ label: 'Proxy Contract',     desc: 'Contract logic can be swapped silently', severity: 'high' }); }
   if (goplus?.hidden_owner === '1')            { score += 14; flags.push({ label: 'Hidden Owner',       desc: 'Concealed owner can reclaim control', severity: 'critical' }); }
   if (goplus?.is_blacklisted === '1')          { score += 12; flags.push({ label: 'Blacklist Function', desc: 'Owner can block wallets from selling', severity: 'high' }); }
   if (goplus?.can_take_back_ownership === '1') { score += 12; flags.push({ label: 'Reclaim Ownership',  desc: 'Renouncement can be reversed', severity: 'high' }); }
   if (goplus?.transfer_pausable === '1')       { score += 10; flags.push({ label: 'Transfer Pausable',  desc: 'Owner can freeze all transfers', severity: 'high' }); }
   if (goplus?.selfdestruct === '1')            { score += 20; flags.push({ label: 'Self-Destruct',      desc: 'Contract can be destroyed — funds lost', severity: 'critical' }); }
+  if (goplus?.owner_change_balance === '1')    { score += 20; flags.push({ label: 'Balance Manipulation', desc: 'Owner can change wallet balances', severity: 'critical' }); }
+  if (goplus?.fake_token === '1')              { score += 50; flags.push({ label: 'Fake Token', desc: 'This token impersonates a legitimate project', severity: 'critical' }); }
+  if (goplus?.is_airdrop_scam === '1')         { score += 50; flags.push({ label: 'Airdrop Scam', desc: 'This token is a known airdrop scam', severity: 'critical' }); }
 
-  // ── HOLDER CONCENTRATION — only if data present ──
+  // ── HOLDER CONCENTRATION ──
   const topHolder = parseFloat(goplus?.holders?.[0]?.percent || 0) * 100;
-  if (topHolder > 70)      { score += 20; flags.push({ label: 'Extreme Whale',       desc: `Top wallet: ${topHolder.toFixed(1)}% — single dump risk`, severity: 'critical' }); }
+  // Check if top holder is the creator (strong pump signal)
+  const topIsCreator = goplus?.holders?.[0]?.is_contract === '0' && !goplus?.holders?.[0]?.tag;
+  if (topHolder > 70)      { score += 20 + (topIsCreator ? 10 : 0); flags.push({ label: 'Extreme Whale', desc: `Top wallet: ${topHolder.toFixed(1)}%${topIsCreator ? ' (likely creator)' : ''}`, severity: 'critical' }); }
   else if (topHolder > 50) { score += 15; flags.push({ label: 'Whale Concentration', desc: `Top wallet: ${topHolder.toFixed(1)}%`, severity: 'critical' }); }
   else if (topHolder > 30) { score += 8;  flags.push({ label: 'High Concentration',  desc: `Top wallet: ${topHolder.toFixed(1)}%`, severity: 'high' }); }
   else if (topHolder > 15) { score += 4;  flags.push({ label: 'Moderate Concentration', desc: `Top wallet: ${topHolder.toFixed(1)}%`, severity: 'medium' }); }
