@@ -97,13 +97,20 @@ nav{padding:1.25rem 2rem;display:flex;align-items:center;justify-content:space-b
   <div class="grid">
     <!-- FORM -->
     <div>
+      <!-- Upgrade banner — shown if not subscribed -->
+      <div id="upgradeBanner" style="display:none;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);border-radius:12px;padding:1.25rem;margin-bottom:1rem">
+        <div style="font-size:14px;font-weight:700;color:#fbbf24;margin-bottom:6px">🏷 White-Label Add-on Required</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:1rem;line-height:1.6">You need the White-Label add-on ($149/month) to create a branded URL. Your current plan doesn't include it.</div>
+        <button onclick="buyWhiteLabel()" style="background:linear-gradient(135deg,#d97706,#b45309);border:none;color:#fff;padding:10px 22px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Buy White-Label Add-on — $149/mo →</button>
+      </div>
+
       <div class="card">
         <div class="card-title">⚙ Brand Settings</div>
         <div id="alertBox" class="alert"></div>
 
         <div class="field">
           <label>Your Whale Email</label>
-          <input id="emailInput" type="email" placeholder="your@email.com"/>
+          <input id="emailInput" type="email" placeholder="your@email.com" onblur="checkWhitelabelAccess()"/>
           <div class="field-hint">Must be a Whale plan account</div>
         </div>
 
@@ -233,6 +240,35 @@ function updatePreview() {
   if (logo) {
     document.getElementById('previewName').innerHTML = `<img src="${logo}" style="height:20px;object-fit:contain;vertical-align:middle;margin-right:6px" onerror="this.style.display='none'"> ${name}`;
   }
+}
+
+async function checkWhitelabelAccess() {
+  const email = document.getElementById('emailInput').value.trim();
+  if (!email) return;
+  try {
+    const r = await fetch(`${API}/api/user/${encodeURIComponent(email)}`);
+    const d = await r.json();
+    const hasAccess = d.plan === 'whale' || d.whitelabel_active;
+    document.getElementById('upgradeBanner').style.display = hasAccess ? 'none' : 'block';
+    document.getElementById('generateBtn').disabled = !hasAccess;
+    if (!hasAccess) document.getElementById('generateBtn').textContent = '🔒 White-Label Add-on Required';
+    else document.getElementById('generateBtn').textContent = '🏷 Generate My Branded URL';
+  } catch (e) {}
+}
+
+async function buyWhiteLabel() {
+  const email = document.getElementById('emailInput').value.trim();
+  if (!email) { alert('Please enter your email first'); return; }
+  try {
+    const r = await fetch(`${API}/api/checkout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, plan: 'whitelabel' })
+    });
+    const d = await r.json();
+    if (d.url) window.location.href = d.url;
+    else throw new Error(d.error);
+  } catch (err) { alert('Checkout failed: ' + err.message); }
 }
 
 async function generate() {
