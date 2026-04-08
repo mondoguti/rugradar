@@ -5,6 +5,9 @@
   ],
   "routes": [
     { "src": "/", "dest": "/index.html" },
-    { "src": "/success", "dest": "/success.html" }
+    { "src": "/success", "dest": "/success.html" },
+    { "src": "/api-dashboard", "dest": "/api.html" },
+    { "src": "/bulk", "dest": "/bulk.html" },
+    { "src": "/watchlist", "dest": "/watchlist.html" }
   ]
 }
