@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RugRadar — White-Label Setup</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#060608;--surface:#0d0d12;--border:#1a1a24;--border2:#252530;--text:#f0f0f8;--muted:#5a5a7a;--accent:#ff3b3b;--safe:#00d97e;--blue:#4a9eff;--purple:#a78bfa;--mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;--display:'Syne',sans-serif}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh}
+nav{padding:1.25rem 2rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(6,6,8,0.9)}
+.nav-logo{font-family:var(--display);font-size:1.1rem;font-weight:800;text-decoration:none;color:var(--text)}
+.nav-logo span{color:var(--accent)}
+.nav-back{font-size:13px;color:var(--muted);text-decoration:none}
+.nav-back:hover{color:var(--text)}
+.container{max-width:820px;margin:0 auto;padding:3rem 2rem}
+.page-label{font-family:var(--mono);font-size:11px;color:var(--purple);letter-spacing:3px;text-transform:uppercase;margin-bottom:0.75rem}
+.page-title{font-family:var(--display);font-size:2rem;font-weight:800;letter-spacing:-1px;margin-bottom:0.5rem}
+.page-sub{font-size:14px;color:var(--muted);margin-bottom:2.5rem;line-height:1.6}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+.card{background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:2rem}
+.card-title{font-family:var(--display);font-size:1rem;font-weight:700;margin-bottom:1.5rem;display:flex;align-items:center;gap:8px}
+.field{margin-bottom:1.25rem}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;font-family:var(--mono)}
+.field input{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px 14px;font-family:var(--sans);font-size:14px;color:var(--text);outline:none;transition:border-color 0.2s}
+.field input:focus{border-color:var(--purple)}
+.field input::placeholder{color:var(--muted)}
+.field-hint{font-size:11px;color:var(--muted);margin-top:5px}
+.color-row{display:flex;gap:10px;align-items:center}
+.color-row input[type="color"]{width:44px;height:44px;border:1px solid var(--border2);border-radius:8px;cursor:pointer;background:none;padding:2px}
+.color-row input[type="text"]{flex:1}
+.color-presets{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.preset{width:24px;height:24px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all 0.15s}
+.preset:hover{transform:scale(1.2)}
+.btn{width:100%;padding:13px;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;font-family:var(--display);border:none;transition:all 0.2s;letter-spacing:0.5px;margin-top:0.5rem}
+.btn-purple{background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff}
+.btn-purple:hover{opacity:0.9}
+.btn-purple:disabled{background:var(--border2);color:var(--muted);cursor:not-allowed}
+.alert{padding:12px 16px;border-radius:10px;font-size:13px;margin-bottom:1rem;display:none}
+.alert-success{background:rgba(0,217,126,0.08);border:1px solid rgba(0,217,126,0.2);color:var(--safe)}
+.alert-error{background:rgba(255,59,59,0.08);border:1px solid rgba(255,59,59,0.2);color:#ff6b6b}
+.preview-card{background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:2rem;position:sticky;top:2rem}
+.preview-nav{display:flex;align-items:center;gap:10px;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid var(--border)}
+.preview-logo{font-family:var(--display);font-size:1rem;font-weight:800}
+.preview-scanner{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1rem;margin-bottom:1rem}
+.preview-input{background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--muted);width:100%;margin-bottom:8px}
+.preview-btn{border:none;border-radius:8px;padding:10px 16px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;width:100%}
+.preview-label{font-size:10px;color:var(--muted);text-align:center;margin-top:1rem}
+.result-card{background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:2rem;margin-top:1.5rem;display:none}
+.result-url{font-family:var(--mono);font-size:13px;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px;word-break:break-all;color:var(--safe);margin-bottom:1rem}
+.copy-btn{background:rgba(0,217,126,0.1);border:1px solid rgba(0,217,126,0.2);color:var(--safe);padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans);transition:all 0.2s;margin-right:8px}
+.copy-btn:hover{background:rgba(0,217,126,0.2)}
+.open-btn{background:var(--purple);border:none;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans)}
+.steps-card{background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:2rem;margin-bottom:1.5rem}
+.step-row{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border)}
+.step-row:last-child{border-bottom:none}
+.step-num{width:28px;height:28px;border-radius:50%;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:var(--purple);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--mono)}
+.step-text{font-size:13px;color:var(--muted);line-height:1.6;padding-top:4px}
+.step-text strong{color:var(--text)}
+@media(max-width:700px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="index.html" class="nav-logo">RUG<span>RADAR</span></a>
+  <a href="index.html" class="nav-back">← Back</a>
+</nav>
+
+<div class="container">
+  <div class="page-label">Whale Feature</div>
+  <h1 class="page-title">White-Label Setup</h1>
+  <p class="page-sub">Create your own branded version of RugRadar. Get a custom URL with your name and colors to share with your community — powered by RugRadar's security engine.</p>
+
+  <!-- How it works -->
+  <div class="steps-card">
+    <div class="card-title">🏷 How it works</div>
+    <div class="step-row">
+      <div class="step-num">1</div>
+      <div class="step-text"><strong>Fill in your brand details</strong> — name, color, optional logo URL</div>
+    </div>
+    <div class="step-row">
+      <div class="step-num">2</div>
+      <div class="step-text"><strong>Click "Generate My Branded URL"</strong> — takes 5 seconds</div>
+    </div>
+    <div class="step-row">
+      <div class="step-num">3</div>
+      <div class="step-text"><strong>Share your URL</strong> with your community, website, or Telegram group</div>
+    </div>
+    <div class="step-row">
+      <div class="step-num">4</div>
+      <div class="step-text"><strong>Your users see your brand</strong> — your name, your colors, your logo. Powered by RugRadar's security engine.</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- FORM -->
+    <div>
+      <div class="card">
+        <div class="card-title">⚙ Brand Settings</div>
+        <div id="alertBox" class="alert"></div>
+
+        <div class="field">
+          <label>Your Whale Email</label>
+          <input id="emailInput" type="email" placeholder="your@email.com"/>
+          <div class="field-hint">Must be a Whale plan account</div>
+        </div>
+
+        <div class="field">
+          <label>Brand Name</label>
+          <input id="brandName" type="text" placeholder="e.g. CryptoAlpha Security" oninput="updatePreview()"/>
+        </div>
+
+        <div class="field">
+          <label>URL Slug</label>
+          <input id="slug" type="text" placeholder="e.g. cryptoalpha" oninput="cleanSlug()"/>
+          <div class="field-hint">Letters and numbers only — becomes part of your URL</div>
+        </div>
+
+        <div class="field">
+          <label>Logo URL <span style="opacity:0.5">(optional)</span></label>
+          <input id="logoUrl" type="url" placeholder="https://your-site.com/logo.png" oninput="updatePreview()"/>
+          <div class="field-hint">Direct link to your logo image (PNG or SVG recommended)</div>
+        </div>
+
+        <div class="field">
+          <label>Brand Color</label>
+          <div class="color-row">
+            <input type="color" id="colorPicker" value="#a78bfa" oninput="syncColor(this.value)"/>
+            <input type="text" id="colorHex" value="#a78bfa" placeholder="#ff3b3b" oninput="syncColorHex(this.value)"/>
+          </div>
+          <div class="color-presets">
+            <div class="preset" style="background:#ff3b3b" onclick="syncColor('#ff3b3b')" title="Red"></div>
+            <div class="preset" style="background:#4a9eff" onclick="syncColor('#4a9eff')" title="Blue"></div>
+            <div class="preset" style="background:#00d97e" onclick="syncColor('#00d97e')" title="Green"></div>
+            <div class="preset" style="background:#a78bfa" onclick="syncColor('#a78bfa')" title="Purple"></div>
+            <div class="preset" style="background:#f59e0b" onclick="syncColor('#f59e0b')" title="Orange"></div>
+            <div class="preset" style="background:#06b6d4" onclick="syncColor('#06b6d4')" title="Cyan"></div>
+            <div class="preset" style="background:#ec4899" onclick="syncColor('#ec4899')" title="Pink"></div>
+            <div class="preset" style="background:#10b981" onclick="syncColor('#10b981')" title="Emerald"></div>
+          </div>
+        </div>
+
+        <button class="btn btn-purple" id="generateBtn" onclick="generate()">🏷 Generate My Branded URL</button>
+      </div>
+
+      <!-- RESULT -->
+      <div class="result-card" id="resultCard">
+        <div class="card-title" style="color:var(--safe)">✅ Your branded URL is ready!</div>
+        <div class="result-url" id="resultUrl"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="copy-btn" onclick="copyUrl()">Copy URL</button>
+          <button class="open-btn" onclick="openUrl()">Preview →</button>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:1rem;line-height:1.7">
+          Share this URL on your website, Telegram, Twitter, or anywhere. Your users will see your branding — not RugRadar's.<br><br>
+          <strong style="color:var(--text)">To update your branding</strong> — just fill out the form again and regenerate.
+        </div>
+      </div>
+    </div>
+
+    <!-- PREVIEW -->
+    <div>
+      <div class="preview-card">
+        <div class="card-title">👁 Live Preview</div>
+        <div class="preview-nav">
+          <svg width="20" height="20" viewBox="0 0 36 36" fill="none">
+            <circle cx="18" cy="18" r="17" stroke="#a78bfa" stroke-width="1.5" opacity="0.4"/>
+            <circle cx="18" cy="18" r="5" stroke="#a78bfa" stroke-width="1.5"/>
+            <line x1="18" y1="18" x2="30" y2="10" stroke="#a78bfa" stroke-width="2" stroke-linecap="round">
+              <animateTransform attributeName="transform" type="rotate" from="0 18 18" to="360 18 18" dur="3s" repeatCount="indefinite"/>
+            </line>
+          </svg>
+          <div class="preview-logo" id="previewName">Your Brand</div>
+        </div>
+        <div class="preview-scanner">
+          <div class="preview-input">Paste token contract address...</div>
+          <button class="preview-btn" id="previewBtn" style="background:#a78bfa">SCAN →</button>
+        </div>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;color:var(--muted)">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span>✓ LOW RISK</span>
+            <span id="previewScore" style="font-family:var(--mono);font-weight:700;color:#a78bfa">12</span>
+          </div>
+          <div style="font-size:11px;opacity:0.7">Honeypot: Safe · Tax: 0% · Liquidity locked</div>
+        </div>
+        <div class="preview-label">Powered by RugRadar</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'https://rugradar-production.up.railway.app';
+let generatedUrl = '';
+
+function showAlert(msg, type) {
+  const box = document.getElementById('alertBox');
+  box.textContent = msg;
+  box.className = `alert alert-${type}`;
+  box.style.display = 'block';
+  setTimeout(() => box.style.display = 'none', 5000);
+}
+
+function cleanSlug() {
+  const el = document.getElementById('slug');
+  el.value = el.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+}
+
+function syncColor(hex) {
+  document.getElementById('colorPicker').value = hex;
+  document.getElementById('colorHex').value = hex;
+  updatePreview();
+}
+
+function syncColorHex(hex) {
+  if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    document.getElementById('colorPicker').value = hex;
+    updatePreview();
+  }
+}
+
+function updatePreview() {
+  const name = document.getElementById('brandName').value || 'Your Brand';
+  const color = document.getElementById('colorHex').value || '#a78bfa';
+  const logo = document.getElementById('logoUrl').value;
+
+  document.getElementById('previewName').textContent = name;
+  document.getElementById('previewBtn').style.background = color;
+  document.getElementById('previewScore').style.color = color;
+
+  if (logo) {
+    document.getElementById('previewName').innerHTML = `<img src="${logo}" style="height:20px;object-fit:contain;vertical-align:middle;margin-right:6px" onerror="this.style.display='none'"> ${name}`;
+  }
+}
+
+async function generate() {
+  const email = document.getElementById('emailInput').value.trim();
+  const brandName = document.getElementById('brandName').value.trim();
+  const slug = document.getElementById('slug').value.trim();
+  const logoUrl = document.getElementById('logoUrl').value.trim();
+  const primaryColor = document.getElementById('colorHex').value.trim();
+
+  if (!email) { showAlert('Please enter your Whale account email', 'error'); return; }
+  if (!brandName) { showAlert('Please enter your brand name', 'error'); return; }
+  if (!slug || slug.length < 3) { showAlert('Please enter a URL slug (at least 3 characters)', 'error'); return; }
+
+  const btn = document.getElementById('generateBtn');
+  btn.textContent = 'Generating...';
+  btn.disabled = true;
+
+  try {
+    const r = await fetch(`${API}/api/wl`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, brandName, slug, logoUrl: logoUrl || null, primaryColor })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed to generate');
+
+    generatedUrl = `https://rugradar-rho.vercel.app?wl=${slug}`;
+    document.getElementById('resultUrl').textContent = generatedUrl;
+    document.getElementById('resultCard').style.display = 'block';
+    document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth' });
+  } catch (err) {
+    showAlert(err.message, 'error');
+  }
+
+  btn.textContent = '🏷 Generate My Branded URL';
+  btn.disabled = false;
+}
+
+function copyUrl() {
+  navigator.clipboard.writeText(generatedUrl);
+  const btn = event.target;
+  btn.textContent = 'Copied! ✓';
+  setTimeout(() => btn.textContent = 'Copy URL', 2000);
+}
+
+function openUrl() {
+  window.open(generatedUrl, '_blank');
+}
+
+// Auto-fill slug from brand name
+document.getElementById('brandName').addEventListener('input', () => {
+  const name = document.getElementById('brandName').value;
+  document.getElementById('slug').value = name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20);
+});
+</script>
+</body>
+</html>
