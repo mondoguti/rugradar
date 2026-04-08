@@ -18,6 +18,25 @@ const PRICES = {
   whale: process.env.STRIPE_PRICE_WHALE || 'price_placeholder',
 };
 
+const RESEND_API_KEY = process.env.RESEND_API_KEY || null;
+
+async function sendAlertEmail(email, tokenName, tokenSymbol, riskLevel, riskScore, address, chain) {
+  if (!RESEND_API_KEY) return;
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${RESEND_API_KEY}` },
+      body: JSON.stringify({
+        from: 'RugRadar Alerts <onboarding@resend.dev>',
+        to: [email],
+        subject: `⚠️ HIGH RISK Alert — ${tokenName} (${tokenSymbol})`,
+        html: `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;background:#060608;color:#f0f0f8;padding:2rem;border-radius:12px"><h2 style="color:#ff3b3b;margin-bottom:1rem">⚠️ Risk Alert from RugRadar</h2><p style="color:#a0a0b8;margin-bottom:1.5rem">A token in your watchlist just changed to <strong style="color:#ff6b6b">HIGH RISK</strong>.</p><div style="background:#0d0d12;border:1px solid #2a2a3e;border-radius:10px;padding:1.25rem;margin-bottom:1.5rem"><div style="font-size:1.25rem;font-weight:700;margin-bottom:6px">${tokenName} (${tokenSymbol})</div><div style="font-family:monospace;font-size:11px;color:#5a5a7a;margin-bottom:12px">${address} · ${chain}</div><span style="background:rgba(255,59,59,0.12);color:#ff6b6b;border:1px solid rgba(255,59,59,0.25);padding:4px 12px;border-radius:100px;font-size:12px;font-weight:700">HIGH RISK — ${riskScore}/100</span></div><a href="https://rugradar-rho.vercel.app" style="background:#ff3b3b;color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:700;display:inline-block;margin-bottom:1.5rem">View on RugRadar →</a><p style="color:#5a5a7a;font-size:12px">You're receiving this because you watch this token on RugRadar. <a href="https://rugradar-rho.vercel.app/watchlist.html" style="color:#4a9eff">Manage watchlist</a></p></div>`,
+      }),
+    });
+    console.log(`📧 Alert sent to ${email} for ${tokenName}`);
+  } catch (e) { console.error('Email error:', e.message); }
+}
+
 // ── CHAIN CONFIG ──────────────────────────────────────────────────────────────
 const CHAIN_CONFIG = {
   ETH:    { goplusId: '1',       etherscanBase: 'https://api.etherscan.io/v2/api',         name: 'Ethereum' },
@@ -347,12 +366,16 @@ app.delete('/api/watchlist', async (req, res) => {
 app.post('/api/watchlist/update', async (req, res) => {
   const { email, address, chain, tokenName, tokenSymbol, riskLevel, riskScore } = req.body;
   try {
+    const { data: existing } = await supabase.from('watchlist').select('last_risk_level')
+      .eq('user_email', email).eq('address', address).eq('chain', chain).single();
     await supabase.from('watchlist').update({
       token_name: tokenName, token_symbol: tokenSymbol,
       last_risk_level: riskLevel, last_risk_score: riskScore,
       last_checked: new Date().toISOString()
     }).eq('user_email', email).eq('address', address).eq('chain', chain);
-    res.json({ success: true });
+    const emailSent = riskLevel === 'HIGH' && existing?.last_risk_level !== 'HIGH';
+    if (emailSent) await sendAlertEmail(email, tokenName, tokenSymbol, riskLevel, riskScore, address, chain);
+    res.json({ success: true, emailSent });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.listen(PORT, () => console.log(`🛡 RugRadar running on port ${PORT} — ${Object.keys(CHAIN_CONFIG).length} chains supported`));
