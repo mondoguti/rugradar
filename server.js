@@ -3,19 +3,191 @@ const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 8080;
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
-const ETHERSCAN_KEY = 'YOUR_REAL_ETHERSCAN_KEY';
+
+const ETHERSCAN_KEY = process.env.ETHERSCAN_KEY || 'AXVGSMJ8E546YEDAYQKXSQSX2ME4JPTPAD';
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_placeholder';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5500';
-const PRICES = { pro: process.env.STRIPE_PRICE_PRO || 'price_placeholder', whale: process.env.STRIPE_PRICE_WHALE || 'price_placeholder' };
+const PRICES = {
+  pro:   process.env.STRIPE_PRICE_PRO   || 'price_placeholder',
+  whale: process.env.STRIPE_PRICE_WHALE || 'price_placeholder',
+};
+
+// ── CHAIN CONFIG ──────────────────────────────────────────────────────────────
+const CHAIN_CONFIG = {
+  ETH:    { goplusId: '1',       etherscanBase: 'https://api.etherscan.io/v2/api',        name: 'Ethereum' },
+  BSC:    { goplusId: '56',      etherscanBase: 'https://api.bscscan.com/api',            name: 'BNB Chain' },
+  BASE:   { goplusId: '8453',    etherscanBase: 'https://api.basescan.org/api',           name: 'Base' },
+  ARB:    { goplusId: '42161',   etherscanBase: 'https://api.arbiscan.io/api',            name: 'Arbitrum' },
+  SOL:    { goplusId: 'solana',  etherscanBase: null,                                     name: 'Solana' },
+  MATIC:  { goplusId: '137',     etherscanBase: 'https://api.polygonscan.com/api',        name: 'Polygon' },
+  AVAX:   { goplusId: '43114',   etherscanBase: 'https://api.snowtrace.io/api',           name: 'Avalanche' },
+  FTM:    { goplusId: '250',     etherscanBase: 'https://api.ftmscan.com/api',            name: 'Fantom' },
+  OP:     { goplusId: '10',      etherscanBase: 'https://api-optimistic.etherscan.io/api',name: 'Optimism' },
+  BLAST:  { goplusId: '81457',   etherscanBase: null,                                     name: 'Blast' },
+  ZKERA:  { goplusId: '324',     etherscanBase: null,                                     name: 'zkSync' },
+  LINEA:  { goplusId: '59144',   etherscanBase: null,                                     name: 'Linea' },
+  CRONOS: { goplusId: '25',      etherscanBase: null,                                     name: 'Cronos' },
+  SCROLL: { goplusId: '534352',  etherscanBase: null,                                     name: 'Scroll' },
+  MANTA:  { goplusId: '169',     etherscanBase: null,                                     name: 'Manta' },
+};
+
+// ── MIDDLEWARE ────────────────────────────────────────────────────────────────
 app.use('/api/webhook', express.raw({ type: 'application/json' }));
 app.use(cors({ origin: '*' }));
 app.use(express.json());
-app.get('/api/health', (_, res) => res.json({ status: 'ok', db: 'supabase' }));
+
+// ── API HELPERS ───────────────────────────────────────────────────────────────
+async function fetchJSON(url) {
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function fetchGoPlus(address, chainId) {
+  try {
+    const isSolana = chainId === 'solana';
+    const url = isSolana
+      ? `https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${address}`
+      : `https://api.gopluslabs.io/api/v1/token_security/${chainId}?contract_addresses=${address.toLowerCase()}`;
+    const data = await fetchJSON(url);
+    return data?.result?.[address.toLowerCase()] || data?.result?.[address] || null;
+  } catch (e) { return null; }
+}
+
+async function fetchHoneypot(address, chainId) {
+  try {
+    if (chainId === 'solana') return null;
+    return await fetchJSON(`https://api.honeypot.is/v2/IsHoneypot?address=${address}&chainID=${chainId}`);
+  } catch (e) { return null; }
+}
+
+async function fetchDexScreener(address) {
+  try {
+    const data = await fetchJSON(`https://api.dexscreener.com/latest/dex/tokens/${address}`);
+    return data?.pairs?.[0] || null;
+  } catch (e) { return null; }
+}
+
+async function fetchEtherscan(address, chainId) {
+  try {
+    if (chainId === 'solana') return null;
+    const key = Object.keys(CHAIN_CONFIG).find(k => CHAIN_CONFIG[k].goplusId === chainId);
+    const base = CHAIN_CONFIG[key]?.etherscanBase;
+    if (!base) return null;
+    const data = await fetchJSON(`${base}?module=contract&action=getsourcecode&address=${address}&apikey=${ETHERSCAN_KEY}`);
+    return data?.result?.[0] || null;
+  } catch (e) { return null; }
+}
+
+function calculateScore(goplus, honeypot, dex, etherscan) {
+  let score = 0;
+  const flags = [], safe = [];
+
+  const isHoneypot = goplus?.is_honeypot === '1' || honeypot?.honeypotResult?.isHoneypot === true;
+  isHoneypot
+    ? (score += 25, flags.push({ label: 'Honeypot Detected', desc: 'Cannot sell — funds will be trapped', severity: 'critical' }))
+    : safe.push({ label: 'Honeypot Test', desc: 'Token can be bought and sold freely' });
+
+  const buyTax  = parseFloat(goplus?.buy_tax  || honeypot?.simulationResult?.buyTax  || 0);
+  const sellTax = parseFloat(goplus?.sell_tax || honeypot?.simulationResult?.sellTax || 0);
+  if (sellTax > 20 || buyTax > 20)      { score += 15; flags.push({ label: 'Extreme Tax',   desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%`, severity: 'high' }); }
+  else if (sellTax > 10 || buyTax > 10) { score += 8;  flags.push({ label: 'High Tax',      desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%`, severity: 'medium' }); }
+  else safe.push({ label: 'Tax Rate', desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%` });
+
+  goplus?.is_mintable === '1'
+    ? (score += 10, flags.push({ label: 'Mintable Supply', desc: 'Owner can print unlimited tokens', severity: 'high' }))
+    : safe.push({ label: 'Fixed Supply', desc: 'Cannot mint new tokens' });
+
+  const renounced = goplus?.owner_address === '0x0000000000000000000000000000000000000000';
+  !renounced && goplus?.owner_address
+    ? (score += 10, flags.push({ label: 'Owner Active', desc: 'Contract not renounced — owner can modify', severity: 'medium' }))
+    : safe.push({ label: 'Contract Renounced', desc: 'Owner gave up control' });
+
+  goplus?.lp_locked !== '1'
+    ? (score += 10, flags.push({ label: 'Liquidity Unlocked', desc: 'LP can be removed anytime — rug risk', severity: 'high' }))
+    : safe.push({ label: 'Liquidity Locked', desc: 'LP cannot be removed' });
+
+  goplus?.is_proxy     === '1' && (score += 8,  flags.push({ label: 'Proxy Contract',      desc: 'Contract logic can be swapped without warning', severity: 'medium' }));
+  goplus?.hidden_owner === '1' && (score += 8,  flags.push({ label: 'Hidden Owner',        desc: 'Concealed owner can reclaim control', severity: 'high' }));
+  goplus?.is_blacklisted === '1' && (score += 5, flags.push({ label: 'Blacklist Function', desc: 'Owner can block wallets from selling', severity: 'medium' }));
+
+  const topHolder = parseFloat(goplus?.holders?.[0]?.percent || 0) * 100;
+  if (topHolder > 50)      { score += 5; flags.push({ label: 'Whale Concentration', desc: `Top wallet holds ${topHolder.toFixed(1)}%`, severity: 'high' }); }
+  else if (topHolder > 20) { score += 2; flags.push({ label: 'High Concentration',  desc: `Top wallet holds ${topHolder.toFixed(1)}%`, severity: 'low' }); }
+  else if (topHolder > 0)  safe.push({ label: 'Holder Distribution', desc: `Top wallet holds ${topHolder.toFixed(1)}%` });
+
+  if (etherscan) {
+    etherscan.SourceCode === ''
+      ? (score += 4, flags.push({ label: 'Unverified Contract', desc: 'Source code is hidden — cannot be audited', severity: 'medium' }))
+      : safe.push({ label: 'Verified Contract', desc: 'Source code is publicly auditable' });
+  }
+
+  const liqUSD = parseFloat(dex?.liquidity?.usd || 0);
+  if (liqUSD > 0 && liqUSD < 5000) { score += 5; flags.push({ label: 'Very Low Liquidity', desc: `Only $${liqUSD.toLocaleString()} — easy to manipulate`, severity: 'medium' }); }
+  else if (liqUSD >= 5000) safe.push({ label: 'Liquidity', desc: `$${liqUSD.toLocaleString()} in liquidity` });
+
+  return { score: Math.min(score, 100), risk: score >= 40 ? 'HIGH' : score >= 20 ? 'MEDIUM' : 'LOW', flags, safe };
+}
+
+// ── ROUTES ────────────────────────────────────────────────────────────────────
+app.get('/api/health', (_, res) => res.json({ status: 'ok', db: 'supabase', chains: Object.keys(CHAIN_CONFIG).length }));
+
+app.post('/api/scan', async (req, res) => {
+  const { address, chain = 'ETH', email } = req.body;
+  if (!address || address.length < 10) return res.status(400).json({ error: 'Invalid address' });
+  const chainCfg = CHAIN_CONFIG[chain];
+  if (!chainCfg) return res.status(400).json({ error: 'Unsupported chain' });
+  try {
+    const [gp, hp, dx, eth] = await Promise.allSettled([
+      fetchGoPlus(address, chainCfg.goplusId),
+      fetchHoneypot(address, chainCfg.goplusId),
+      fetchDexScreener(address),
+      fetchEtherscan(address, chainCfg.goplusId),
+    ]);
+    const goplusData   = gp.status  === 'fulfilled' ? gp.value  : null;
+    const honeypotData = hp.status  === 'fulfilled' ? hp.value  : null;
+    const dexData      = dx.status  === 'fulfilled' ? dx.value  : null;
+    const ethData      = eth.status === 'fulfilled' ? eth.value : null;
+    const { score, risk, flags, safe } = calculateScore(goplusData, honeypotData, dexData, ethData);
+    res.json({
+      address, chain, chainName: chainCfg.name, score, risk, flags, safe,
+      tokenInfo: {
+        name:    goplusData?.token_name   || dexData?.baseToken?.name   || 'Unknown',
+        symbol:  goplusData?.token_symbol || dexData?.baseToken?.symbol || '???',
+        holders: parseInt(goplusData?.holder_count || 0),
+      },
+      marketData: dexData ? {
+        priceUSD:       parseFloat(dexData.priceUsd || 0),
+        liquidityUSD:   parseFloat(dexData.liquidity?.usd || 0),
+        volume24h:      parseFloat(dexData.volume?.h24 || 0),
+        priceChange24h: parseFloat(dexData.priceChange?.h24 || 0),
+      } : null,
+      sources: { goplus: !!goplusData, honeypot: !!honeypotData, dexscreener: !!dexData, etherscan: !!ethData },
+      scannedAt: new Date().toISOString(),
+    });
+  } catch (err) { res.status(500).json({ error: 'Scan failed. Try again.' }); }
+});
+
+app.get('/api/user/:email', async (req, res) => {
+  try {
+    const email = decodeURIComponent(req.params.email);
+    const { data: user } = await supabase.from('users').select('*').eq('email', email).single();
+    if (!user) {
+      await supabase.from('users').insert({ email, plan: 'free' });
+      return res.json({ email, plan: 'free', unlimited: false, scansToday: 0, scansLeft: 3 });
+    }
+    const today = new Date().toISOString().split('T')[0];
+    const scansToday = user.scan_date === today ? user.scans_today : 0;
+    res.json({ email: user.email, plan: user.plan, unlimited: user.plan !== 'free', scansToday, scansLeft: user.plan !== 'free' ? 999 : Math.max(0, 3 - scansToday) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/checkout', async (req, res) => {
   const { email, plan } = req.body;
   if (!email || !PRICES[plan]) return res.status(400).json({ error: 'Invalid request' });
@@ -35,7 +207,7 @@ app.post('/api/checkout', async (req, res) => {
       mode: 'subscription',
       line_items: [{ price: PRICES[plan], quantity: 1 }],
       success_url: `${FRONTEND_URL}/success.html?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${FRONTEND_URL}?cancelled=true`,
+      cancel_url:  `${FRONTEND_URL}?cancelled=true`,
       metadata: { email, plan },
     });
     res.json({ url: session.url });
@@ -45,44 +217,16 @@ app.post('/api/checkout', async (req, res) => {
   }
 });
 
-app.post('/api/scan', async (req, res) => {
-  const { address, chain = 'ETH', email } = req.body;
-  if (!address || address.length < 10) return res.status(400).json({ error: 'Invalid address' });
-  const chainCfg = CHAIN_CONFIG[chain];
-  if (!chainCfg) return res.status(400).json({ error: 'Unsupported chain' });
+app.post('/api/portal', async (req, res) => {
+  const { email } = req.body;
   try {
-    const [gp, hp, dx] = await Promise.allSettled([
-      fetchGoPlus(address, chainCfg.goplusId),
-      fetchHoneypot(address, chainCfg.goplusId),
-      fetchDexScreener(address),
-    ]);
-    const goplusData = gp.status === 'fulfilled' ? gp.value : null;
-    const honeypotData = hp.status === 'fulfilled' ? hp.value : null;
-    const dexData = dx.status === 'fulfilled' ? dx.value : null;
-    const { score, risk, flags, safe } = calculateScore(goplusData, honeypotData, dexData, null);
-    res.json({
-      address, chain, chainName: chainCfg.name, score, risk, flags, safe,
-      tokenInfo: { name: goplusData?.token_name || dexData?.baseToken?.name || 'Unknown', symbol: goplusData?.token_symbol || dexData?.baseToken?.symbol || '???', holders: parseInt(goplusData?.holder_count || 0) },
-      marketData: dexData ? { priceUSD: parseFloat(dexData.priceUsd || 0), liquidityUSD: parseFloat(dexData.liquidity?.usd || 0), volume24h: parseFloat(dexData.volume?.h24 || 0), priceChange24h: parseFloat(dexData.priceChange?.h24 || 0) } : null,
-      sources: { goplus: !!goplusData, honeypot: !!honeypotData, dexscreener: !!dexData, etherscan: false },
-      scannedAt: new Date().toISOString(),
-    });
-  } catch (err) { res.status(500).json({ error: 'Scan failed' }); }
-});
-
-app.get('/api/user/:email', async (req, res) => {
-  try {
-    const email = decodeURIComponent(req.params.email);
     const { data: user } = await supabase.from('users').select('*').eq('email', email).single();
-    if (!user) {
-      await supabase.from('users').insert({ email, plan: 'free' });
-      return res.json({ email, plan: 'free', unlimited: false, scansToday: 0, scansLeft: 3 });
-    }
-    const today = new Date().toISOString().split('T')[0];
-    const scansToday = user.scan_date === today ? user.scans_today : 0;
-    res.json({ email: user.email, plan: user.plan, unlimited: user.plan !== 'free', scansToday, scansLeft: user.plan !== 'free' ? 999 : Math.max(0, 3 - scansToday) });
+    if (!user?.stripe_customer_id) return res.status(404).json({ error: 'No subscription found' });
+    const session = await stripe.billingPortal.sessions.create({ customer: user.stripe_customer_id, return_url: FRONTEND_URL });
+    res.json({ url: session.url });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
 app.post('/api/webhook', (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
@@ -94,12 +238,17 @@ app.post('/api/webhook', (req, res) => {
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const email = session.metadata?.email;
-    const plan = session.metadata?.plan;
+    const plan  = session.metadata?.plan;
     if (email && plan) {
       supabase.from('users').upsert({ email, plan, stripe_customer_id: session.customer, stripe_subscription_id: session.subscription }, { onConflict: 'email' })
         .then(() => console.log(`✅ Upgraded ${email} to ${plan}`));
     }
+  } else if (event.type === 'invoice.payment_failed' || event.type === 'customer.subscription.deleted') {
+    const customerId = event.data.object.customer;
+    supabase.from('users').select('*').eq('stripe_customer_id', customerId).single()
+      .then(({ data: user }) => { if (user) supabase.from('users').update({ plan: 'free' }).eq('email', user.email); });
   }
   res.json({ received: true });
 });
-app.listen(PORT, () => console.log(`RugRadar running on port ${PORT}`));
+
+app.listen(PORT, () => console.log(`🛡 RugRadar running on port ${PORT} — ${Object.keys(CHAIN_CONFIG).length} chains supported`));
