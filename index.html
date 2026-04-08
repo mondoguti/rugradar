@@ -148,6 +148,14 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:1.25rem 2rem;display
 .error-title{font-weight:600;color:#ff6b6b;margin-bottom:6px}
 .error-desc{font-size:13px;color:var(--muted)}
 
+/* ── SCORE METER ── */
+.score-meter{padding:1.25rem 1.5rem;border-top:1px solid var(--border)}
+.score-meter-bar{width:100%;height:8px;background:var(--surface2);border-radius:100px;overflow:hidden;margin-bottom:10px}
+.score-meter-fill{height:100%;border-radius:100px;transition:width 0.8s ease}
+.score-meter-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);font-family:var(--font-mono);letter-spacing:0.5px;margin-bottom:10px}
+.score-meter-summary{font-size:13px;line-height:1.6}
+.chain-warn{background:rgba(255,184,0,0.08);border:1px solid rgba(255,184,0,0.25);border-radius:10px;padding:12px 16px;margin-bottom:1rem;font-size:13px;color:#ffd060;display:flex;align-items:center;gap:8px}
+
 /* ── PRICING ── */
 .pricing-section{padding:6rem 2rem;max-width:1100px;margin:0 auto}
 .pricing-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1.25rem;margin-top:3rem}
@@ -602,6 +610,17 @@ async function checkPlan() {
 async function doScan() {
   const address = document.getElementById('addrInput').value.trim();
   if (!address || address.length < 10) return;
+  // Chain mismatch detection
+  const isEVMAddr = address.startsWith('0x');
+  const isSolChain = chain === 'SOL';
+  if (isSolChain && isEVMAddr) {
+    document.getElementById('result').innerHTML = `<div class="chain-warn">⚠️ This looks like an EVM address (starts with 0x) but you selected Solana. Try ETH, BSC, or BASE instead.</div>`;
+    return;
+  }
+  if (!isSolChain && !isEVMAddr && address.length > 32) {
+    document.getElementById('result').innerHTML = `<div class="chain-warn">⚠️ This looks like a Solana address but you selected ${chain}. Switch to SOL chain above.</div>`;
+    return;
+  }
   if (currentPlan === 'free' && scansToday >= 3) {
     document.getElementById('result').innerHTML = `<div class="error-box"><div class="error-title">Daily limit reached</div><div class="error-desc">You've used your 3 free scans today. Upgrade to Pro for unlimited scans.</div></div>`;
     document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
@@ -628,7 +647,10 @@ function showResult(d) {
   const sH = d.safe.map(f => `<div class="check"><div class="ci ci-safe">✓</div><div><div class="check-label">${f.label}</div><div class="check-desc">${f.desc}</div></div></div>`).join('');
   const mH = d.marketData ? `<div class="market-row"><div class="mst"><div class="mst-label">Price</div><div class="mst-val">$${fmt(d.marketData.priceUSD)}</div></div><div class="mst"><div class="mst-label">Liquidity</div><div class="mst-val">$${fmtK(d.marketData.liquidityUSD)}</div></div><div class="mst"><div class="mst-label">24h Change</div><div class="mst-val ${d.marketData.priceChange24h >= 0 ? 'up' : 'down'}">${d.marketData.priceChange24h >= 0 ? '+' : ''}${d.marketData.priceChange24h.toFixed(2)}%</div></div></div>` : '';
   const sum = d.risk === 'HIGH' ? `<strong>High risk.</strong> ${d.flags.length} critical flags detected. Proceed with extreme caution or avoid entirely.` : d.risk === 'MEDIUM' ? `<strong>Proceed with caution.</strong> ${d.flags.length} concern${d.flags.length !== 1 ? 's' : ''} found. Research further before investing.` : `<strong>Looks relatively safe.</strong> No major red flags detected. Always DYOR before investing.`;
-  document.getElementById('result').innerHTML = `<div class="result-card"><div class="result-header"><div><div class="risk-badge badge-${d.risk}">${riskLabel}</div><div class="token-name">${d.tokenInfo.name} <span style="color:var(--muted);font-size:0.85em">(${d.tokenInfo.symbol})</span></div><div class="token-addr">${d.address}</div>${d.tokenInfo.holders ? `<div style="font-size:12px;color:var(--muted);margin-top:6px;font-family:var(--font-mono)">${d.tokenInfo.holders.toLocaleString()} holders · ${d.chainName}</div>` : ''}</div><div class="score-box"><div class="score-num score-${d.risk}">${d.score}</div><div class="score-sub">Risk Score</div></div></div><hr class="divider"><div class="checks">${fH}${sH}</div>${mH}<div class="summary-bar">${sum}</div><div class="sources-row">${['goplus', 'honeypot', 'dexscreener', 'etherscan'].map(s => `<span class="src ${d.sources[s] ? 'src-on' : 'src-off'}">${s} ${d.sources[s] ? '✓' : '✗'}</span>`).join('')}</div></div>`;
+  const scoreColor = d.score >= 70 ? '#ff6b6b' : d.score >= 40 ? '#ffd060' : d.score >= 20 ? '#ffb800' : '#00d97e';
+  const scoreSummary = d.score >= 70 ? '☠️ Critical risk — do not invest' : d.score >= 40 ? '🚨 Multiple red flags — high caution advised' : d.score >= 20 ? '⚠️ Some concerns — research before investing' : '✅ Looks safe — no major red flags detected';
+  const meterHTML = `<div class="score-meter"><div class="score-meter-bar"><div class="score-meter-fill" style="width:${d.score}%;background:${scoreColor}"></div></div><div class="score-meter-labels"><span>0 · Safe</span><span>20 · Low</span><span>40 · Medium</span><span>70 · High</span><span>100</span></div><div class="score-meter-summary" style="color:${scoreColor}">${scoreSummary}</div></div>`;
+  document.getElementById('result').innerHTML = `<div class="result-card"><div class="result-header"><div><div class="risk-badge badge-${d.risk}">${riskLabel}</div><div class="token-name">${d.tokenInfo.name} <span style="color:var(--muted);font-size:0.85em">(${d.tokenInfo.symbol})</span></div><div class="token-addr">${d.address}</div>${d.tokenInfo.holders ? `<div style="font-size:12px;color:var(--muted);margin-top:6px;font-family:var(--font-mono)">${d.tokenInfo.holders.toLocaleString()} holders · ${d.chainName}</div>` : ''}</div><div class="score-box"><div class="score-num score-${d.risk}">${d.score}</div><div class="score-sub">Risk Score</div></div></div>${meterHTML}<hr class="divider"><div class="checks">${fH}${sH}</div>${mH}<div class="summary-bar">${sum}</div><div class="sources-row">${['goplus', 'honeypot', 'dexscreener', 'etherscan', 'rugcheck'].filter(s => d.sources[s] !== undefined).map(s => `<span class="src ${d.sources[s] ? 'src-on' : 'src-off'}">${s} ${d.sources[s] ? '✓' : '✗'}</span>`).join('')}</div></div>`;
 }
 
 async function startCheckout(plan) {
