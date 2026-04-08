@@ -150,7 +150,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:1.25rem 2rem;display
 
 /* ── PRICING ── */
 .pricing-section{padding:6rem 2rem;max-width:1100px;margin:0 auto}
-.pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;margin-top:3rem}
+.pricing-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1.25rem;margin-top:3rem}
 .price-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:2rem;position:relative;overflow:hidden;transition:all 0.2s}
 .price-card:hover{border-color:var(--border2)}
 .price-card.popular{border-color:var(--accent)}
@@ -190,7 +190,7 @@ footer strong{color:var(--accent)}
 /* ── RESPONSIVE ── */
 @media(max-width:768px){
   .steps{grid-template-columns:1fr}
-  .pricing-grid{grid-template-columns:1fr}
+  .pricing-grid{grid-template-columns:1fr;gap:1rem}
   .features-grid{grid-template-columns:1fr}
   .checks{grid-template-columns:1fr}
   .check{border-right:none}
@@ -435,9 +435,23 @@ footer strong{color:var(--accent)}
         <li>Bulk token scanning</li>
         <li>Telegram bot alerts</li>
         <li>Priority support</li>
-        <li>White-label option</li>
-      </ul>
+        </ul>
       <button class="price-btn btn-purple" id="btnWhale" onclick="startCheckout('whale')">Upgrade to Whale</button>
+    </div>
+    <div class="price-card" style="border-color:rgba(251,191,36,0.3)">
+      <div class="price-tier" style="color:#fbbf24">White-Label</div>
+      <div class="price-amount" style="font-size:2rem">$149</div>
+      <div class="price-period">per month add-on</div>
+      <hr class="price-divider">
+      <ul class="price-features">
+        <li>Your brand name + logo</li>
+        <li>Custom accent color</li>
+        <li>Branded scanner URL</li>
+        <li>Share with your community</li>
+        <li>Works with Pro or Whale</li>
+        <li>Self-serve setup</li>
+      </ul>
+      <button class="price-btn" id="btnWL" onclick="startCheckout('whitelabel')" style="background:linear-gradient(135deg,#d97706,#b45309);color:#fff;font-weight:700;font-size:14px;cursor:pointer;font-family:var(--font-display);border:none;border-radius:10px;padding:13px;width:100%;letter-spacing:0.5px">Add White-Label</button>
     </div>
   </div>
   <div id="manageLink" style="display:none;text-align:center;margin-top:1.5rem">
@@ -562,7 +576,8 @@ function showResult(d) {
 async function startCheckout(plan) {
   const email = getEmail();
   if (!email) { alert('Please enter your email first'); document.getElementById('emailInput').focus(); return; }
-  const btn = document.getElementById(plan === 'pro' ? 'btnPro' : 'btnWhale');
+  const btnMap = { pro: 'btnPro', whale: 'btnWhale', whitelabel: 'btnWL' };
+  const btn = document.getElementById(btnMap[plan]);
   const orig = btn.textContent;
   btn.textContent = 'Loading...';
   btn.disabled = true;

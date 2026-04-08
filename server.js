@@ -14,8 +14,9 @@ const ETHERSCAN_KEY = process.env.ETHERSCAN_KEY || 'AXVGSMJ8E546YEDAYQKXSQSX2ME4
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_placeholder';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5500';
 const PRICES = {
-  pro:   process.env.STRIPE_PRICE_PRO   || 'price_placeholder',
-  whale: process.env.STRIPE_PRICE_WHALE || 'price_placeholder',
+  pro:        process.env.STRIPE_PRICE_PRO   || 'price_placeholder',
+  whale:      process.env.STRIPE_PRICE_WHALE || 'price_placeholder',
+  whitelabel: 'price_1TJmkIFt2DJ7Dwg2rGP9j3Q9',
 };
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || null;
@@ -329,13 +330,30 @@ app.post('/api/webhook', (req, res) => {
     const email = session.metadata?.email;
     const plan  = session.metadata?.plan;
     if (email && plan) {
-      supabase.from('users').upsert({ email, plan, stripe_customer_id: session.customer, stripe_subscription_id: session.subscription }, { onConflict: 'email' })
-        .then(() => console.log(`✅ Upgraded ${email} to ${plan}`));
+      if (plan === 'whitelabel') {
+        // White-label add-on — just set whitelabel_active, don't change main plan
+        supabase.from('users').update({ whitelabel_active: true, whitelabel_subscription_id: session.subscription })
+          .eq('email', email)
+          .then(() => console.log(`✅ White-label activated for ${email}`));
+      } else {
+        supabase.from('users').upsert({ email, plan, stripe_customer_id: session.customer, stripe_subscription_id: session.subscription }, { onConflict: 'email' })
+          .then(() => console.log(`✅ Upgraded ${email} to ${plan}`));
+      }
     }
   } else if (event.type === 'invoice.payment_failed' || event.type === 'customer.subscription.deleted') {
+    const subId = event.data.object.id || event.data.object.subscription;
     const customerId = event.data.object.customer;
+    // Check if it's a whitelabel sub cancellation
+    supabase.from('users').select('*').eq('whitelabel_subscription_id', subId).single()
+      .then(({ data: wlUser }) => {
+        if (wlUser) {
+          supabase.from('users').update({ whitelabel_active: false, whitelabel_subscription_id: null }).eq('email', wlUser.email);
+          console.log(`❌ White-label cancelled for ${wlUser.email}`);
+        }
+      });
+    // Also handle main plan cancellation
     supabase.from('users').select('*').eq('stripe_customer_id', customerId).single()
-      .then(({ data: user }) => { if (user) supabase.from('users').update({ plan: 'free' }).eq('email', user.email); });
+      .then(({ data: user }) => { if (user && user.whitelabel_subscription_id !== subId) supabase.from('users').update({ plan: 'free' }).eq('email', user.email); });
   }
   res.json({ received: true });
 });
@@ -502,7 +520,7 @@ app.post('/api/wl', async (req, res) => {
   if (!slug || !brandName || !ownerEmail) return res.status(400).json({ error: 'slug, brandName and ownerEmail required' });
   try {
     const { data: user } = await supabase.from('users').select('plan').eq('email', ownerEmail).single();
-    if (!user || user.plan !== 'whale') return res.status(403).json({ error: 'Whale plan required for white-label' });
+    if (!user || (user.plan !== 'whale' && !user.whitelabel_active)) return res.status(403).json({ error: 'White-label add-on required. Upgrade at rugradar-rho.vercel.app' });
     const { data, error } = await supabase.from('whitelabel').upsert({
       slug: slug.toLowerCase().replace(/[^a-z0-9-]/g, ''),
       brand_name: brandName,
