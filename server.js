@@ -314,5 +314,45 @@ app.post('/api/v1/scan', async (req, res) => {
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+app.post('/api/watchlist', async (req, res) => {
+  const { email, address, chain, tokenName, tokenSymbol } = req.body;
+  try {
+    const { data, error } = await supabase.from('watchlist')
+      .upsert({ user_email: email, address, chain, token_name: tokenName, token_symbol: tokenSymbol }, { onConflict: 'user_email,address,chain' })
+      .select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
+app.get('/api/watchlist/:email', async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('watchlist').select('*')
+      .eq('user_email', decodeURIComponent(req.params.email))
+      .order('added_at', { ascending: false });
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/watchlist', async (req, res) => {
+  const { email, address, chain } = req.body;
+  try {
+    await supabase.from('watchlist').delete()
+      .eq('user_email', email).eq('address', address).eq('chain', chain);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/watchlist/update', async (req, res) => {
+  const { email, address, chain, tokenName, tokenSymbol, riskLevel, riskScore } = req.body;
+  try {
+    await supabase.from('watchlist').update({
+      token_name: tokenName, token_symbol: tokenSymbol,
+      last_risk_level: riskLevel, last_risk_score: riskScore,
+      last_checked: new Date().toISOString()
+    }).eq('user_email', email).eq('address', address).eq('chain', chain);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 app.listen(PORT, () => console.log(`🛡 RugRadar running on port ${PORT} — ${Object.keys(CHAIN_CONFIG).length} chains supported`));

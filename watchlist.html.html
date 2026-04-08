@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RugRadar — Portfolio Watchlist</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#060608;--surface:#0d0d12;--border:#1a1a24;--border2:#252530;--text:#f0f0f8;--muted:#5a5a7a;--accent:#ff3b3b;--safe:#00d97e;--warn:#ffb800;--blue:#4a9eff;--mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;--display:'Syne',sans-serif}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh}
+nav{padding:1.25rem 2rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(6,6,8,0.9)}
+.nav-logo{font-family:var(--display);font-size:1.1rem;font-weight:800;text-decoration:none;color:var(--text)}
+.nav-logo span{color:var(--accent)}
+.nav-back{font-size:13px;color:var(--muted);text-decoration:none}
+.nav-back:hover{color:var(--text)}
+.container{max-width:900px;margin:0 auto;padding:3rem 2rem}
+.page-label{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:3px;text-transform:uppercase;margin-bottom:0.75rem}
+.page-title{font-family:var(--display);font-size:2rem;font-weight:800;letter-spacing:-1px;margin-bottom:0.5rem}
+.page-sub{font-size:14px;color:var(--muted);margin-bottom:2.5rem;line-height:1.6}
+.card{background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:2rem;margin-bottom:1.5rem}
+.input-row{display:flex;gap:10px;margin-bottom:1rem}
+.text-input{flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px 16px;font-family:var(--sans);font-size:14px;color:var(--text);outline:none;transition:border-color 0.2s}
+.text-input:focus{border-color:var(--accent)}
+.text-input::placeholder{color:var(--muted)}
+.mono-input{font-family:var(--mono);font-size:13px}
+.chain-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem}
+.cpill{font-size:12px;font-weight:500;padding:5px 14px;border-radius:100px;border:1px solid var(--border2);cursor:pointer;background:transparent;color:var(--muted);transition:all 0.15s;font-family:var(--sans)}
+.cpill:hover{border-color:var(--muted);color:var(--text)}
+.cpill.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn{padding:12px 22px;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;font-family:var(--display);border:none;transition:all 0.2s;letter-spacing:0.5px;white-space:nowrap}
+.btn-red{background:var(--accent);color:#fff}
+.btn-red:hover{background:#e02020}
+.btn-red:disabled{background:var(--border2);color:var(--muted);cursor:not-allowed}
+.btn-small{padding:7px 14px;font-size:12px;border-radius:8px}
+.btn-ghost{background:transparent;border:1px solid var(--border2);color:var(--muted)}
+.btn-ghost:hover{border-color:var(--muted);color:var(--text)}
+.alert{padding:12px 16px;border-radius:10px;font-size:13px;margin-bottom:1rem;display:none}
+.alert-success{background:rgba(0,217,126,0.08);border:1px solid rgba(0,217,126,0.2);color:var(--safe)}
+.alert-error{background:rgba(255,59,59,0.08);border:1px solid rgba(255,59,59,0.2);color:#ff6b6b}
+.alert-warn{background:rgba(255,184,0,0.08);border:1px solid rgba(255,184,0,0.2);color:#ffd060}
+.refresh-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem}
+.refresh-bar h3{font-family:var(--display);font-size:1rem;font-weight:700}
+.refresh-info{font-size:12px;color:var(--muted)}
+.refresh-btn{font-size:12px;padding:7px 14px;border-radius:8px;background:rgba(74,158,255,0.1);border:1px solid rgba(74,158,255,0.2);color:var(--blue);cursor:pointer;font-family:var(--sans);font-weight:600;display:flex;align-items:center;gap:6px}
+.refresh-btn:hover{background:rgba(74,158,255,0.2)}
+.refresh-icon{display:inline-block;transition:transform 0.5s}
+.spinning{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.watch-grid{display:flex;flex-direction:column;gap:10px}
+.watch-card{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:1.25rem;display:flex;align-items:center;gap:1rem;transition:border-color 0.2s}
+.watch-card:hover{border-color:var(--border2)}
+.watch-card.danger{border-color:rgba(255,59,59,0.4);background:rgba(255,59,59,0.03)}
+.watch-info{flex:1;min-width:0}
+.watch-name{font-weight:600;font-size:14px;margin-bottom:3px;display:flex;align-items:center;gap:8px}
+.watch-addr{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.watch-chain{font-size:11px;color:var(--muted);margin-top:3px}
+.watch-score{text-align:center;min-width:60px}
+.score-num{font-family:var(--mono);font-size:1.5rem;font-weight:700;line-height:1}
+.score-label{font-size:10px;color:var(--muted);margin-top:2px;letter-spacing:1px}
+.s-HIGH{color:#ff6b6b}.s-MEDIUM{color:#ffd060}.s-LOW{color:#00d97e}.s-UNKNOWN{color:var(--muted)}
+.risk-badge{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:100px;letter-spacing:1px}
+.r-HIGH{background:rgba(255,59,59,0.12);color:#ff6b6b;border:1px solid rgba(255,59,59,0.2)}
+.r-MEDIUM{background:rgba(255,184,0,0.12);color:#ffd060;border:1px solid rgba(255,184,0,0.2)}
+.r-LOW{background:rgba(0,217,126,0.12);color:#00d97e;border:1px solid rgba(0,217,126,0.2)}
+.r-UNKNOWN{background:rgba(255,255,255,0.05);color:var(--muted);border:1px solid var(--border)}
+.watch-flags{font-size:12px;color:var(--muted);min-width:80px;text-align:center}
+.watch-actions{display:flex;gap:8px}
+.delete-btn{background:rgba(255,59,59,0.08);border:1px solid rgba(255,59,59,0.15);color:#ff6b6b;padding:7px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:var(--sans);transition:all 0.2s}
+.delete-btn:hover{background:rgba(255,59,59,0.15)}
+.scan-now-btn{background:rgba(74,158,255,0.08);border:1px solid rgba(74,158,255,0.15);color:var(--blue);padding:7px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:var(--sans);transition:all 0.2s}
+.scan-now-btn:hover{background:rgba(74,158,255,0.15)}
+.empty-state{text-align:center;padding:3rem;color:var(--muted);font-size:14px;line-height:1.8}
+.loading-state{text-align:center;padding:2rem;color:var(--muted);font-size:14px}
+.mini-spinner{width:18px;height:18px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px}
+.alert-banner{background:rgba(255,59,59,0.08);border:1px solid rgba(255,59,59,0.25);border-radius:12px;padding:1rem 1.25rem;margin-bottom:1.5rem;display:flex;align-items:center;gap:12px;font-size:13px;display:none}
+.alert-banner-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.last-checked{font-size:11px;color:var(--muted);margin-top:3px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="index.html" class="nav-logo">RUG<span>RADAR</span></a>
+  <a href="index.html" class="nav-back">← Back to scanner</a>
+</nav>
+
+<div class="container">
+  <div class="page-label">Whale Feature</div>
+  <h1 class="page-title">Portfolio Watchlist</h1>
+  <p class="page-sub">Save tokens to monitor. We'll track their risk scores and email you immediately if anything turns HIGH RISK.</p>
+
+  <!-- ALERT BANNER -->
+  <div class="alert-banner" id="alertBanner">
+    <div class="alert-banner-dot"></div>
+    <span id="alertBannerText">⚠ Some tokens in your watchlist have turned HIGH RISK</span>
+  </div>
+
+  <!-- ADD TOKEN CARD -->
+  <div class="card">
+    <div id="alertBox" class="alert"></div>
+    <div class="input-row">
+      <input id="emailInput" class="text-input" type="email" placeholder="Your Whale account email" onblur="loadWatchlist()"/>
+    </div>
+    <div class="chain-row">
+      <button class="cpill active" onclick="setChain('ETH',this)">ETH</button>
+      <button class="cpill" onclick="setChain('BSC',this)">BSC</button>
+      <button class="cpill" onclick="setChain('BASE',this)">Base</button>
+      <button class="cpill" onclick="setChain('ARB',this)">ARB</button>
+      <button class="cpill" onclick="setChain('SOL',this)">SOL</button>
+      <button class="cpill" onclick="setChain('MATIC',this)">Polygon</button>
+      <button class="cpill" onclick="setChain('AVAX',this)">AVAX</button>
+      <button class="cpill" onclick="setChain('OP',this)">OP</button>
+    </div>
+    <div class="input-row">
+      <input id="addrInput" class="text-input mono-input" placeholder="Token contract address to watch"/>
+      <button class="btn btn-red" id="addBtn" onclick="addToWatchlist()">+ Add to Watchlist</button>
+    </div>
+  </div>
+
+  <!-- WATCHLIST -->
+  <div id="watchlistSection">
+    <div class="refresh-bar">
+      <h3>Watched Tokens <span id="watchCount" style="color:var(--muted);font-weight:400;font-size:0.85em"></span></h3>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span class="refresh-info" id="lastRefresh"></span>
+        <button class="refresh-btn" onclick="refreshAll()">
+          <span class="refresh-icon" id="refreshIcon">↻</span> Refresh All
+        </button>
+      </div>
+    </div>
+    <div class="watch-grid" id="watchGrid">
+      <div class="loading-state">Enter your email above to load your watchlist</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'https://rugradar-production.up.railway.app';
+let chain = 'ETH';
+let watchlist = [];
+
+function setChain(c, el) {
+  chain = c;
+  document.querySelectorAll('.cpill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function getEmail() { return document.getElementById('emailInput').value.trim(); }
+
+function showAlert(msg, type) {
+  const box = document.getElementById('alertBox');
+  box.textContent = msg;
+  box.className = `alert alert-${type}`;
+  box.style.display = 'block';
+  setTimeout(() => box.style.display = 'none', 4000);
+}
+
+async function loadWatchlist() {
+  const email = getEmail();
+  if (!email) return;
+
+  document.getElementById('watchGrid').innerHTML = '<div class="loading-state"><span class="mini-spinner"></span>Loading watchlist...</div>';
+
+  try {
+    const r = await fetch(`${API}/api/watchlist/${encodeURIComponent(email)}`);
+    const data = await r.json();
+    if (!r.ok) {
+      document.getElementById('watchGrid').innerHTML = `<div class="empty-state">${data.error || 'Failed to load'}</div>`;
+      return;
+    }
+    watchlist = data;
+    document.getElementById('watchCount').textContent = `(${watchlist.length})`;
+    renderWatchlist();
+    checkAlerts();
+  } catch (e) {
+    document.getElementById('watchGrid').innerHTML = '<div class="empty-state">Could not connect to server</div>';
+  }
+}
+
+function renderWatchlist() {
+  const grid = document.getElementById('watchGrid');
+  if (!watchlist.length) {
+    grid.innerHTML = '<div class="empty-state">No tokens in your watchlist yet.<br>Add your first token above to start monitoring.</div>';
+    return;
+  }
+
+  grid.innerHTML = watchlist.map(item => {
+    const risk = item.last_risk_level || 'UNKNOWN';
+    const score = item.last_risk_score || '—';
+    const shortAddr = item.address ? `${item.address.slice(0,8)}...${item.address.slice(-6)}` : '';
+    const lastChecked = item.last_checked ? new Date(item.last_checked).toLocaleString() : 'Not scanned yet';
+    const flagInfo = '—';
+    return `<div class="watch-card ${risk === 'HIGH' ? 'danger' : ''}" id="wc-${item.id}">
+      <div class="watch-info">
+        <div class="watch-name">
+          ${item.token_name || 'Unknown Token'}
+          <span class="risk-badge r-${risk}">${risk}</span>
+        </div>
+        <div class="watch-addr">${shortAddr}</div>
+        <div class="watch-chain">${item.chain} · <span class="last-checked">Last checked: ${lastChecked}</span></div>
+      </div>
+      <div class="watch-score">
+        <div class="score-num s-${risk}">${score}</div>
+        <div class="score-label">RISK</div>
+      </div>
+      <div class="watch-actions">
+        <button class="scan-now-btn" onclick="scanNow('${item.id}','${item.address}','${item.chain}')">Scan Now</button>
+        <button class="delete-btn" onclick="removeToken('${item.id}')">Remove</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function checkAlerts() {
+  const highRisk = watchlist.filter(t => t.last_risk_level === 'HIGH');
+  const banner = document.getElementById('alertBanner');
+  if (highRisk.length > 0) {
+    document.getElementById('alertBannerText').textContent = `⚠ ${highRisk.length} token${highRisk.length > 1 ? 's' : ''} in your watchlist ${highRisk.length > 1 ? 'are' : 'is'} HIGH RISK`;
+    banner.style.display = 'flex';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+async function addToWatchlist() {
+  const email = getEmail();
+  const address = document.getElementById('addrInput').value.trim();
+  if (!email) { showAlert('Please enter your email first', 'error'); return; }
+  if (!address || address.length < 10) { showAlert('Please enter a valid token address', 'error'); return; }
+
+  const btn = document.getElementById('addBtn');
+  btn.textContent = 'Adding...';
+  btn.disabled = true;
+
+  try {
+    // First verify whale plan
+    const ur = await fetch(`${API}/api/user/${encodeURIComponent(email)}`);
+    const ud = await ur.json();
+    if (ud.plan !== 'whale') {
+      showAlert('Watchlist requires a Whale plan ($29.99/month)', 'error');
+      btn.textContent = '+ Add to Watchlist';
+      btn.disabled = false;
+      return;
+    }
+
+    // Add to watchlist
+    const r = await fetch(`${API}/api/watchlist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, address, chain, tokenName: 'Unknown', tokenSymbol: '???' })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed to add');
+
+    showAlert('Token added to watchlist!', 'success');
+    document.getElementById('addrInput').value = '';
+    await loadWatchlist();
+
+    // Auto-scan the newly added token
+    scanNow(d.id, address, chain);
+  } catch (err) {
+    showAlert(err.message, 'error');
+  }
+
+  btn.textContent = '+ Add to Watchlist';
+  btn.disabled = false;
+}
+
+async function scanNow(id, address, tokenChain) {
+  const email = getEmail();
+  const cardEl = document.getElementById(`wc-${id}`);
+  if (cardEl) {
+    const btn = cardEl.querySelector('.scan-now-btn');
+    if (btn) { btn.textContent = 'Scanning...'; btn.disabled = true; }
+  }
+
+  try {
+    const r = await fetch(`${API}/api/scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address, chain: tokenChain, email })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+
+    // Update watchlist in Supabase with new risk data
+    await fetch(`${API}/api/watchlist/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email, address, chain: tokenChain,
+        tokenName: d.tokenInfo?.name,
+        tokenSymbol: d.tokenInfo?.symbol,
+        riskLevel: d.risk,
+        riskScore: d.score,
+      })
+    });
+
+    await loadWatchlist();
+  } catch (e) {
+    showAlert('Scan failed: ' + e.message, 'error');
+    if (cardEl) {
+      const btn = cardEl.querySelector('.scan-now-btn');
+      if (btn) { btn.textContent = 'Scan Now'; btn.disabled = false; }
+    }
+  }
+}
+
+async function removeToken(id) {
+  const email = getEmail();
+  const item = watchlist.find(w => w.id === id);
+  if (!item) return;
+  try {
+    await fetch(`${API}/api/watchlist`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, address: item.address, chain: item.chain })
+    });
+    showAlert('Token removed from watchlist', 'success');
+    await loadWatchlist();
+  } catch (e) {
+    showAlert('Failed to remove token', 'error');
+  }
+}
+
+async function refreshAll() {
+  const email = getEmail();
+  if (!email || !watchlist.length) return;
+  const icon = document.getElementById('refreshIcon');
+  icon.classList.add('spinning');
+  document.getElementById('lastRefresh').textContent = 'Refreshing...';
+  for (const item of watchlist) {
+    await scanNow(item.id, item.address, item.chain);
+    await new Promise(r => setTimeout(r, 300));
+  }
+  icon.classList.remove('spinning');
+  document.getElementById('lastRefresh').textContent = `Last refreshed: ${new Date().toLocaleTimeString()}`;
+  checkAlerts();
+}
+</script>
+</body>
+</html>
