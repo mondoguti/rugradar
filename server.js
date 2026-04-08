@@ -331,10 +331,17 @@ app.post('/api/webhook', (req, res) => {
     const plan  = session.metadata?.plan;
     if (email && plan) {
       if (plan === 'whitelabel') {
-        // White-label add-on — just set whitelabel_active, don't change main plan
-        supabase.from('users').update({ whitelabel_active: true, whitelabel_subscription_id: session.subscription })
-          .eq('email', email)
-          .then(() => console.log(`✅ White-label activated for ${email}`));
+        // White-label add-on — activate whitelabel AND upgrade to pro if not already on pro/whale
+        supabase.from('users').select('plan').eq('email', email).single().then(({ data: u }) => {
+          const newPlan = (u?.plan === 'whale') ? 'whale' : 'pro';
+          supabase.from('users').upsert({
+            email,
+            plan: newPlan,
+            stripe_customer_id: session.customer,
+            whitelabel_active: true,
+            whitelabel_subscription_id: session.subscription
+          }, { onConflict: 'email' }).then(() => console.log(`✅ White-label activated for ${email} — plan: ${newPlan}`));
+        });
       } else {
         supabase.from('users').upsert({ email, plan, stripe_customer_id: session.customer, stripe_subscription_id: session.subscription }, { onConflict: 'email' })
           .then(() => console.log(`✅ Upgraded ${email} to ${plan}`));
