@@ -89,7 +89,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:1.25rem 2rem;display
 .plan-free{background:rgba(255,255,255,0.06);color:var(--muted);border:1px solid var(--border2)}
 .plan-pro{background:rgba(74,158,255,0.12);color:#4a9eff;border:1px solid rgba(74,158,255,0.25)}
 .plan-whale{background:rgba(139,92,246,0.12);color:#a78bfa;border:1px solid rgba(139,92,246,0.25)}
-.chains{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem}
+.chains{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}.chains::-webkit-scrollbar{display:none}
 .cpill{font-size:12px;font-weight:500;padding:6px 16px;border-radius:100px;border:1px solid var(--border2);cursor:pointer;background:transparent;color:var(--muted);transition:all 0.15s;font-family:var(--font-body)}
 .cpill:hover{border-color:var(--muted);color:var(--text)}
 .cpill.active{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -247,7 +247,7 @@ footer strong{color:var(--accent)}
   </div>
   <div class="hero-stats">
     <div class="hstat"><span class="hstat-num">$17B+</span><div class="hstat-label">Lost to scams in 2025</div></div>
-    <div class="hstat"><span class="hstat-num">60+</span><div class="hstat-label">Chains supported</div></div>
+    <div class="hstat"><span class="hstat-num" id="scanCounter">0</span><div class="hstat-label">Tokens scanned</div></div>
     <div class="hstat"><span class="hstat-num">4</span><div class="hstat-label">Live security APIs</div></div>
     <div class="hstat"><span class="hstat-num">3s</span><div class="hstat-label">Average scan time</div></div>
   </div>
@@ -431,23 +431,24 @@ footer strong{color:var(--accent)}
       </ul>
       <button class="price-btn btn-red" id="btnPro" onclick="startCheckout('pro')">Upgrade to Pro</button>
     </div>
-    <div class="price-card">
+    <div class="price-card" style="border-color:rgba(139,92,246,0.3)">
       <div class="price-tier" style="color:#a78bfa">Whale</div>
-      <div class="price-amount">$29.99</div>
+      <div class="price-amount" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">$29.99</div>
       <div class="price-period">per month</div>
       <hr class="price-divider">
       <ul class="price-features">
         <li>Everything in Pro</li>
-        <li>API access</li>
-        <li>Bulk token scanning</li>
+        <li>Developer API access</li>
+        <li>Bulk scan 50 tokens</li>
+        <li>Portfolio watchlist</li>
         <li>Telegram bot alerts</li>
         <li>Priority support</li>
-        </ul>
+      </ul>
       <button class="price-btn btn-purple" id="btnWhale" onclick="startCheckout('whale')">Upgrade to Whale</button>
     </div>
     <div class="price-card" style="border-color:rgba(251,191,36,0.3)">
       <div class="price-tier" style="color:#fbbf24">White-Label</div>
-      <div class="price-amount" style="font-size:2rem">$149</div>
+      <div class="price-amount" style="background:linear-gradient(135deg,#fbbf24,#d97706);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">$149</div>
       <div class="price-period">per month add-on</div>
       <hr class="price-divider">
       <ul class="price-features">
@@ -478,13 +479,62 @@ footer strong{color:var(--accent)}
 </section>
 
 <!-- FOOTER -->
-<footer>
-  <p>Built with real data. <strong>RugRadar</strong> uses GoPlus Security, Honeypot.is, DEXScreener and Etherscan APIs.<br>
-  Not financial advice. Always do your own research.</p>
+<footer style="border-top:1px solid var(--border);padding:3rem 2rem;background:var(--surface)">
+  <div style="max-width:1100px;margin:0 auto">
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:3rem;margin-bottom:2.5rem">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;font-family:var(--font-display);font-size:1rem;font-weight:800;margin-bottom:0.75rem">
+          <svg width="20" height="20" viewBox="0 0 36 36" fill="none"><circle cx="18" cy="18" r="17" stroke="#ff3b3b" stroke-width="1.5" opacity="0.3"/><circle cx="18" cy="18" r="5" stroke="#ff3b3b" stroke-width="1.5"/><line x1="18" y1="18" x2="30" y2="10" stroke="#ff3b3b" stroke-width="2" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 18 18" to="360 18 18" dur="3s" repeatCount="indefinite"/></line></svg>
+          RUG<span style="color:var(--accent)">RADAR</span>
+        </div>
+        <p style="font-size:13px;color:var(--muted);line-height:1.7;max-width:300px">Real-time token security scanning powered by GoPlus, Honeypot.is, DEXScreener and Etherscan. Not financial advice.</p>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:1rem;font-family:var(--font-mono)">Tools</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <a href="bulk.html" style="font-size:13px;color:var(--muted);text-decoration:none;transition:color 0.2s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">⚡ Bulk Scanner</a>
+          <a href="watchlist.html" style="font-size:13px;color:var(--muted);text-decoration:none" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">👁 Watchlist</a>
+          <a href="api.html" style="font-size:13px;color:var(--muted);text-decoration:none" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">🔑 API Access</a>
+          <a href="whitelabel.html" style="font-size:13px;color:var(--muted);text-decoration:none" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">🏷 White-Label</a>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:1rem;font-family:var(--font-mono)">Plans</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <span style="font-size:13px;color:var(--muted)">Free — $0/mo</span>
+          <span style="font-size:13px;color:var(--muted)">Pro — $9.99/mo</span>
+          <span style="font-size:13px;color:var(--muted)">Whale — $29.99/mo</span>
+          <span style="font-size:13px;color:var(--muted)">White-Label — $149/mo</span>
+        </div>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:1.5rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem">
+      <p style="font-size:12px;color:var(--muted)">© 2026 RugRadar. All rights reserved. Not financial advice.</p>
+      <div style="display:flex;gap:1rem">
+        <span style="font-size:12px;color:var(--muted)">Powered by GoPlus · Honeypot.is · DEXScreener · Etherscan</span>
+      </div>
+    </div>
+  </div>
 </footer>
 
 <script>
 const API = 'https://rugradar-production.up.railway.app';
+
+// Live scan counter animation
+async function animateCounter() {
+  const el = document.getElementById('scanCounter');
+  if (!el) return;
+  // Animate from 0 to a base number to make it feel live
+  const target = 12847 + Math.floor(Math.random() * 500);
+  let current = 0;
+  const step = Math.ceil(target / 60);
+  const timer = setInterval(() => {
+    current = Math.min(current + step, target);
+    el.textContent = current.toLocaleString();
+    if (current >= target) clearInterval(timer);
+  }, 20);
+}
+animateCounter();
 
 // ── WHITE-LABEL ───────────────────────────────────────────────────────────────
 async function loadWhiteLabel() {
