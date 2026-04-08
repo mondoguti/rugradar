@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RugRadar API Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#060608;--surface:#0d0d12;--border:#1a1a24;--border2:#252530;--text:#f0f0f8;--muted:#5a5a7a;--accent:#ff3b3b;--safe:#00d97e;--blue:#4a9eff;--mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;--display:'Syne',sans-serif}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh}
+nav{padding:1.25rem 2rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(6,6,8,0.9)}
+.nav-logo{font-family:var(--display);font-size:1.1rem;font-weight:800;text-decoration:none;color:var(--text)}
+.nav-logo span{color:var(--accent)}
+.nav-back{font-size:13px;color:var(--muted);text-decoration:none;display:flex;align-items:center;gap:6px}
+.nav-back:hover{color:var(--text)}
+.container{max-width:800px;margin:0 auto;padding:3rem 2rem}
+.page-label{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:3px;text-transform:uppercase;margin-bottom:0.75rem}
+.page-title{font-family:var(--display);font-size:2rem;font-weight:800;letter-spacing:-1px;margin-bottom:0.5rem}
+.page-sub{font-size:14px;color:var(--muted);margin-bottom:3rem;line-height:1.6}
+.card{background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:2rem;margin-bottom:1.5rem}
+.card-title{font-family:var(--display);font-size:1rem;font-weight:700;margin-bottom:1.5rem;display:flex;align-items:center;gap:10px}
+.card-title .dot{width:8px;height:8px;border-radius:50%;background:var(--safe)}
+.email-input{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px 16px;font-family:var(--sans);font-size:14px;color:var(--text);outline:none;margin-bottom:12px;transition:border-color 0.2s}
+.email-input:focus{border-color:var(--accent)}
+.email-input::placeholder{color:var(--muted)}
+.btn{padding:12px 24px;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;font-family:var(--display);border:none;transition:all 0.2s;letter-spacing:0.5px}
+.btn-red{background:var(--accent);color:#fff}
+.btn-red:hover{background:#e02020}
+.btn-red:disabled{background:var(--border2);color:var(--muted);cursor:not-allowed}
+.key-box{background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:16px;display:flex;align-items:center;gap:12px;margin-top:1.5rem}
+.key-value{font-family:var(--mono);font-size:13px;color:var(--safe);flex:1;word-break:break-all}
+.copy-btn{background:rgba(0,217,126,0.1);border:1px solid rgba(0,217,126,0.2);color:var(--safe);padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:var(--sans);transition:all 0.2s}
+.copy-btn:hover{background:rgba(0,217,126,0.2)}
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:1.5rem}
+.stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1rem}
+.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.stat-value{font-family:var(--mono);font-size:1.25rem;font-weight:700}
+.divider{border:none;border-top:1px solid var(--border);margin:1.5rem 0}
+.code-block{background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:1.25rem;font-family:var(--mono);font-size:12px;line-height:1.8;overflow-x:auto;position:relative}
+.code-block .comment{color:var(--muted)}
+.code-block .string{color:#ffd060}
+.code-block .key{color:var(--blue)}
+.code-block .value{color:var(--safe)}
+.tab-row{display:flex;gap:4px;margin-bottom:1rem}
+.tab{padding:7px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--mono);border:1px solid var(--border2);background:transparent;color:var(--muted);transition:all 0.15s}
+.tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.no-key{text-align:center;padding:2rem;color:var(--muted);font-size:14px}
+.no-key a{color:var(--accent);cursor:pointer}
+.badge-whale{background:rgba(139,92,246,0.12);color:#a78bfa;border:1px solid rgba(139,92,246,0.25);font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:100px;letter-spacing:1px}
+.alert{padding:12px 16px;border-radius:10px;font-size:13px;margin-bottom:1rem;display:none}
+.alert-success{background:rgba(0,217,126,0.08);border:1px solid rgba(0,217,126,0.2);color:var(--safe)}
+.alert-error{background:rgba(255,59,59,0.08);border:1px solid rgba(255,59,59,0.2);color:#ff6b6b}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="index.html" class="nav-logo">RUG<span>RADAR</span></a>
+  <a href="index.html" class="nav-back">← Back to scanner</a>
+</nav>
+
+<div class="container">
+  <div class="page-label">Whale Feature</div>
+  <h1 class="page-title">API Dashboard</h1>
+  <p class="page-sub">Access your personal API key to scan tokens programmatically from your own apps and trading bots. Whale plan only — 1,000 requests per day.</p>
+
+  <!-- GET KEY CARD -->
+  <div class="card">
+    <div class="card-title"><div class="dot"></div> Your API Key</div>
+    <div id="alertBox" class="alert"></div>
+    <input id="emailInput" class="email-input" type="email" placeholder="Enter your Whale account email"/>
+    <button class="btn btn-red" id="getKeyBtn" onclick="getKey()">Get My API Key</button>
+    <div id="keySection" style="display:none">
+      <div class="key-box">
+        <div class="key-value" id="keyValue">—</div>
+        <button class="copy-btn" onclick="copyKey()">Copy</button>
+      </div>
+      <div class="stats-grid">
+        <div class="stat"><div class="stat-label">Requests Today</div><div class="stat-value" id="reqToday">0</div></div>
+        <div class="stat"><div class="stat-label">Daily Limit</div><div class="stat-value">1,000</div></div>
+        <div class="stat"><div class="stat-label">Plan</div><div class="stat-value"><span class="badge-whale">WHALE</span></div></div>
+      </div>
+    </div>
+    <div id="noKeySection" style="display:none">
+      <div class="no-key">You need a <span class="badge-whale">WHALE</span> plan to access the API.<br><br><a href="index.html#pricing">Upgrade to Whale →</a></div>
+    </div>
+  </div>
+
+  <!-- DOCS CARD -->
+  <div class="card">
+    <div class="card-title"><div class="dot" style="background:var(--blue)"></div> API Documentation</div>
+    <div class="tab-row">
+      <button class="tab active" onclick="showTab('curl',this)">cURL</button>
+      <button class="tab" onclick="showTab('js',this)">JavaScript</button>
+      <button class="tab" onclick="showTab('python',this)">Python</button>
+    </div>
+
+    <div id="tab-curl">
+      <div class="code-block"><span class="comment"># Scan a token using your API key</span>
+curl -X POST https://rugradar-production.up.railway.app/api/v1/scan \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"x-api-key: YOUR_API_KEY"</span> \
+  -d '<span class="string">{"address": "0x6982508145454Ce325dDbE47a25d4ec3d2311933", "chain": "ETH"}</span>'</div>
+    </div>
+
+    <div id="tab-js" style="display:none">
+      <div class="code-block"><span class="comment">// Scan a token using your API key</span>
+<span class="key">const</span> response = <span class="key">await</span> fetch(<span class="string">'https://rugradar-production.up.railway.app/api/v1/scan'</span>, {
+  method: <span class="string">'POST'</span>,
+  headers: {
+    <span class="string">'Content-Type'</span>: <span class="string">'application/json'</span>,
+    <span class="string">'x-api-key'</span>: <span class="string">'YOUR_API_KEY'</span>
+  },
+  body: JSON.stringify({
+    address: <span class="string">'0x6982508145454Ce325dDbE47a25d4ec3d2311933'</span>,
+    chain: <span class="string">'ETH'</span>
+  })
+});
+<span class="key">const</span> result = <span class="key">await</span> response.json();
+console.log(result.risk);    <span class="comment">// "HIGH" | "MEDIUM" | "LOW"</span>
+console.log(result.score);   <span class="comment">// 0-100</span>
+console.log(result.flags);   <span class="comment">// Array of risk flags</span></div>
+    </div>
+
+    <div id="tab-python" style="display:none">
+      <div class="code-block"><span class="comment"># Scan a token using your API key</span>
+<span class="key">import</span> requests
+
+response = requests.post(
+    <span class="string">'https://rugradar-production.up.railway.app/api/v1/scan'</span>,
+    headers={
+        <span class="string">'x-api-key'</span>: <span class="string">'YOUR_API_KEY'</span>
+    },
+    json={
+        <span class="string">'address'</span>: <span class="string">'0x6982508145454Ce325dDbE47a25d4ec3d2311933'</span>,
+        <span class="string">'chain'</span>: <span class="string">'ETH'</span>
+    }
+)
+result = response.json()
+<span class="key">print</span>(result[<span class="string">'risk'</span>])    <span class="comment"># "HIGH" | "MEDIUM" | "LOW"</span>
+<span class="key">print</span>(result[<span class="string">'score'</span>])   <span class="comment"># 0-100</span></div>
+    </div>
+
+    <hr class="divider">
+
+    <div style="font-size:13px;color:var(--muted);line-height:1.8">
+      <strong style="color:var(--text)">Supported chains:</strong> ETH, BSC, BASE, ARB, SOL, MATIC, AVAX, FTM, OP, BLAST, ZKERA, LINEA, CRONOS, SCROLL, MANTA<br>
+      <strong style="color:var(--text)">Rate limit:</strong> 1,000 requests per day<br>
+      <strong style="color:var(--text)">Response format:</strong> JSON with risk score, flags, market data
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'https://rugradar-production.up.railway.app';
+
+function showAlert(msg, type) {
+  const box = document.getElementById('alertBox');
+  box.textContent = msg;
+  box.className = `alert alert-${type}`;
+  box.style.display = 'block';
+  setTimeout(() => box.style.display = 'none', 4000);
+}
+
+async function getKey() {
+  const email = document.getElementById('emailInput').value.trim();
+  if (!email) { showAlert('Please enter your email', 'error'); return; }
+  const btn = document.getElementById('getKeyBtn');
+  btn.textContent = 'Loading...';
+  btn.disabled = true;
+  try {
+    const r = await fetch(`${API}/api/keys/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      document.getElementById('noKeySection').style.display = 'block';
+      document.getElementById('keySection').style.display = 'none';
+      showAlert(d.error || 'Failed to get key', 'error');
+    } else {
+      document.getElementById('keyValue').textContent = d.apiKey;
+      document.getElementById('keySection').style.display = 'block';
+      document.getElementById('noKeySection').style.display = 'none';
+      if (d.created) showAlert('API key generated successfully!', 'success');
+      loadStats(email);
+    }
+  } catch (err) {
+    showAlert('Connection failed. Is the server running?', 'error');
+  }
+  btn.textContent = 'Get My API Key';
+  btn.disabled = false;
+}
+
+async function loadStats(email) {
+  try {
+    const r = await fetch(`${API}/api/keys/${encodeURIComponent(email)}`);
+    const d = await r.json();
+    if (d.requestsToday !== undefined) {
+      document.getElementById('reqToday').textContent = d.requestsToday.toLocaleString();
+    }
+  } catch (e) {}
+}
+
+function copyKey() {
+  const key = document.getElementById('keyValue').textContent;
+  navigator.clipboard.writeText(key);
+  showAlert('API key copied to clipboard!', 'success');
+}
+
+function showTab(tab, el) {
+  document.querySelectorAll('[id^="tab-"]').forEach(t => t.style.display = 'none');
+  document.getElementById(`tab-${tab}`).style.display = 'block';
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+}
+</script>
+</body>
+</html>
