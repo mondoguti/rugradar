@@ -103,15 +103,47 @@ nav{padding:1.25rem 2rem;display:flex;align-items:center;justify-content:space-b
     <div class="input-row">
       <input id="emailInput" class="text-input" type="email" placeholder="Your Whale account email" onblur="loadWatchlist()"/>
     </div>
-    <div id="telegramSection" style="display:none;background:rgba(0,136,204,0.08);border:1px solid rgba(0,136,204,0.2);border-radius:10px;padding:1rem;margin-bottom:1rem">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+    <div id="telegramSection" style="display:none;background:rgba(0,136,204,0.06);border:1px solid rgba(0,136,204,0.2);border-radius:12px;padding:1.25rem;margin-bottom:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:10px">
         <div>
-          <div style="font-size:13px;font-weight:600;margin-bottom:3px">📱 Telegram Alerts</div>
-          <div id="tgStatus" style="font-size:12px;color:var(--muted)">Not connected</div>
+          <div style="font-size:14px;font-weight:700;margin-bottom:3px;display:flex;align-items:center;gap:8px">
+            📱 Telegram Alerts
+            <span id="tgBadge" style="display:none;background:rgba(0,217,126,0.12);color:#00d97e;border:1px solid rgba(0,217,126,0.25);font-size:10px;padding:2px 8px;border-radius:100px;font-family:var(--mono);letter-spacing:1px">ACTIVE</span>
+          </div>
+          <div id="tgStatus" style="font-size:12px;color:var(--muted)">Get instant alerts on your phone when a watched token turns HIGH RISK</div>
         </div>
-        <button id="tgBtn" onclick="connectTelegram()" style="background:#0088cc;border:none;color:#fff;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Connect Telegram</button>
+        <button id="tgBtn" onclick="connectTelegram()" style="background:#0088cc;border:none;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">Connect Telegram</button>
       </div>
-      <div id="tgCode" style="display:none;margin-top:10px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:12px;font-size:13px;color:var(--muted);line-height:1.7"></div>
+
+      <!-- Instructions (shown when not connected) -->
+      <div id="tgInstructions" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1rem">
+        <div style="font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-family:var(--mono);margin-bottom:10px">How to connect</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted)">
+            <div style="width:22px;height:22px;border-radius:50%;background:rgba(0,136,204,0.15);border:1px solid rgba(0,136,204,0.3);color:#4a9eff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">1</div>
+            <span>Enter your Whale account email above and tab out</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted)">
+            <div style="width:22px;height:22px;border-radius:50%;background:rgba(0,136,204,0.15);border:1px solid rgba(0,136,204,0.3);color:#4a9eff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</div>
+            <span>Click <strong style="color:var(--text)">"Connect Telegram"</strong> above</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted)">
+            <div style="width:22px;height:22px;border-radius:50%;background:rgba(0,136,204,0.15);border:1px solid rgba(0,136,204,0.3);color:#4a9eff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">3</div>
+            <span>A link will appear — click it to open <strong style="color:#0088cc">@RugRadarScanBot</strong> in Telegram</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted)">
+            <div style="width:22px;height:22px;border-radius:50%;background:rgba(0,136,204,0.15);border:1px solid rgba(0,136,204,0.3);color:#4a9eff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">4</div>
+            <span>Press <strong style="color:var(--text)">START</strong> in the Telegram chat — you're connected instantly ✅</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Deep link (shown after clicking connect) -->
+      <div id="tgCode" style="display:none;margin-top:10px;background:var(--bg);border:1px solid rgba(0,136,204,0.25);border-radius:10px;padding:1rem">
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">👇 Click this link to open the bot:</div>
+        <div id="tgLink" style="margin-bottom:10px"></div>
+        <div style="font-size:12px;color:var(--muted)">Then press <strong style="color:var(--text)">START</strong> in Telegram. The page will update automatically once connected.</div>
+      </div>
     </div>
     <div style="display:none">
     </div>
@@ -359,20 +391,26 @@ async function checkTelegram(email) {
     const d = await r.json();
     document.getElementById('telegramSection').style.display = 'block';
     if (d.connected) {
-      document.getElementById('tgStatus').textContent = '✅ Connected — alerts active';
+      document.getElementById('tgStatus').textContent = 'Your Telegram is connected — you will receive instant alerts';
       document.getElementById('tgStatus').style.color = 'var(--safe)';
+      document.getElementById('tgBadge').style.display = 'inline-block';
+      document.getElementById('tgInstructions').style.display = 'none';
+      document.getElementById('tgCode').style.display = 'none';
       document.getElementById('tgBtn').textContent = 'Disconnect';
       document.getElementById('tgBtn').onclick = disconnectTelegram;
-      document.getElementById('tgBtn').style.background = 'rgba(255,59,59,0.15)';
+      document.getElementById('tgBtn').style.background = 'rgba(255,59,59,0.12)';
       document.getElementById('tgBtn').style.color = '#ff6b6b';
-      document.getElementById('tgBtn').style.border = '1px solid rgba(255,59,59,0.3)';
+      document.getElementById('tgBtn').style.border = '1px solid rgba(255,59,59,0.25)';
     } else {
-      document.getElementById('tgStatus').textContent = 'Not connected';
+      document.getElementById('tgStatus').textContent = 'Get instant alerts on your phone when a watched token turns HIGH RISK';
       document.getElementById('tgStatus').style.color = 'var(--muted)';
+      document.getElementById('tgBadge').style.display = 'none';
+      document.getElementById('tgInstructions').style.display = 'block';
       document.getElementById('tgBtn').textContent = 'Connect Telegram';
       document.getElementById('tgBtn').onclick = connectTelegram;
       document.getElementById('tgBtn').style.background = '#0088cc';
       document.getElementById('tgBtn').style.color = '#fff';
+      document.getElementById('tgBtn').style.border = 'none';
     }
   } catch (e) {}
 }
@@ -387,8 +425,9 @@ async function connectTelegram() {
     });
     const d = await r.json();
     if (!r.ok) { showAlert(d.error, 'error'); return; }
+    document.getElementById('tgInstructions').style.display = 'none';
     document.getElementById('tgCode').style.display = 'block';
-    document.getElementById('tgCode').innerHTML = `1. Click this link: <a href="${d.deepLink}" target="_blank" style="color:#0088cc;font-weight:600">Open @RugRadarScanBot in Telegram →</a><br>2. Press <b style="color:var(--text)">Start</b> in the Telegram chat<br>3. Done! Alerts will arrive here automatically.`;
+    document.getElementById('tgLink').innerHTML = `<a href="${d.deepLink}" target="_blank" style="display:inline-flex;align-items:center;gap:8px;background:#0088cc;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:700">📱 Open @RugRadarScanBot in Telegram →</a>`;
     setTimeout(() => checkTelegram(email), 5000);
     setTimeout(() => checkTelegram(email), 10000);
   } catch (e) { showAlert('Failed to connect Telegram', 'error'); }
