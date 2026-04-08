@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RugRadar — Bulk Scanner</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#060608;--surface:#0d0d12;--border:#1a1a24;--border2:#252530;--text:#f0f0f8;--muted:#5a5a7a;--accent:#ff3b3b;--safe:#00d97e;--warn:#ffb800;--blue:#4a9eff;--mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;--display:'Syne',sans-serif}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh}
+nav{padding:1.25rem 2rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(6,6,8,0.9)}
+.nav-logo{font-family:var(--display);font-size:1.1rem;font-weight:800;text-decoration:none;color:var(--text)}
+.nav-logo span{color:var(--accent)}
+.nav-back{font-size:13px;color:var(--muted);text-decoration:none}
+.nav-back:hover{color:var(--text)}
+.container{max-width:1000px;margin:0 auto;padding:3rem 2rem}
+.page-label{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:3px;text-transform:uppercase;margin-bottom:0.75rem}
+.page-title{font-family:var(--display);font-size:2rem;font-weight:800;letter-spacing:-1px;margin-bottom:0.5rem}
+.page-sub{font-size:14px;color:var(--muted);margin-bottom:2.5rem;line-height:1.6}
+.top-row{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem}
+.card{background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:1.75rem}
+.card-title{font-family:var(--display);font-size:0.95rem;font-weight:700;margin-bottom:1rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-size:11px}
+.email-input,.chain-select{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:11px 14px;font-family:var(--sans);font-size:14px;color:var(--text);outline:none;transition:border-color 0.2s;margin-bottom:0}
+.email-input:focus,.chain-select:focus{border-color:var(--accent)}
+.email-input::placeholder{color:var(--muted)}
+.chain-select option{background:var(--bg)}
+.textarea{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px 16px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;resize:vertical;min-height:200px;line-height:1.8;transition:border-color 0.2s}
+.textarea:focus{border-color:var(--accent)}
+.textarea::placeholder{color:var(--muted);font-family:var(--sans)}
+.input-section{margin-bottom:1.5rem}
+.input-section .card-title{margin-bottom:0.75rem}
+.btn{padding:13px 28px;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;font-family:var(--display);border:none;transition:all 0.2s;letter-spacing:0.5px}
+.btn-red{background:var(--accent);color:#fff}
+.btn-red:hover{background:#e02020}
+.btn-red:disabled{background:var(--border2);color:var(--muted);cursor:not-allowed}
+.btn-ghost{background:transparent;border:1px solid var(--border2);color:var(--muted)}
+.btn-ghost:hover{border-color:var(--muted);color:var(--text)}
+.action-row{display:flex;gap:12px;align-items:center;margin-bottom:2rem}
+.scan-counter{font-size:13px;color:var(--muted);font-family:var(--mono)}
+.progress-bar{background:var(--border);border-radius:100px;height:4px;margin-bottom:2rem;overflow:hidden;display:none}
+.progress-fill{height:100%;background:var(--accent);border-radius:100px;transition:width 0.3s;width:0%}
+.progress-label{font-size:12px;color:var(--muted);text-align:center;margin-top:8px;font-family:var(--mono)}
+.results-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
+.results-title{font-family:var(--display);font-size:1.1rem;font-weight:700}
+.export-btn{background:rgba(74,158,255,0.1);border:1px solid rgba(74,158,255,0.2);color:var(--blue);padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--sans)}
+.export-btn:hover{background:rgba(74,158,255,0.2)}
+.summary-pills{display:flex;gap:10px;margin-bottom:1.5rem;flex-wrap:wrap}
+.pill{font-family:var(--mono);font-size:12px;font-weight:700;padding:6px 14px;border-radius:100px}
+.pill-high{background:rgba(255,59,59,0.1);color:#ff6b6b;border:1px solid rgba(255,59,59,0.2)}
+.pill-medium{background:rgba(255,184,0,0.1);color:#ffd060;border:1px solid rgba(255,184,0,0.2)}
+.pill-low{background:rgba(0,217,126,0.1);color:var(--safe);border:1px solid rgba(0,217,126,0.2)}
+.pill-scanning{background:rgba(74,158,255,0.1);color:var(--blue);border:1px solid rgba(74,158,255,0.2)}
+.results-table{width:100%;border-collapse:collapse}
+.results-table th{text-align:left;padding:10px 14px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border);font-family:var(--mono)}
+.results-table td{padding:12px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+.results-table tr:last-child td{border-bottom:none}
+.results-table tr:hover td{background:rgba(255,255,255,0.02)}
+.risk-badge{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:6px;letter-spacing:1px;white-space:nowrap}
+.badge-HIGH{background:rgba(255,59,59,0.12);color:#ff6b6b;border:1px solid rgba(255,59,59,0.25)}
+.badge-MEDIUM{background:rgba(255,184,0,0.12);color:#ffd060;border:1px solid rgba(255,184,0,0.25)}
+.badge-LOW{background:rgba(0,217,126,0.12);color:#00d97e;border:1px solid rgba(0,217,126,0.25)}
+.badge-SCANNING{background:rgba(74,158,255,0.12);color:var(--blue);border:1px solid rgba(74,158,255,0.25)}
+.badge-ERROR{background:rgba(255,255,255,0.06);color:var(--muted);border:1px solid var(--border2)}
+.score-num{font-family:var(--mono);font-weight:700}
+.addr-cell{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.token-name{font-weight:600;margin-bottom:2px}
+.flags-cell{font-size:12px;color:var(--muted)}
+.flag-tag{display:inline-block;background:rgba(255,59,59,0.08);color:#ff6b6b;font-size:10px;padding:2px 8px;border-radius:4px;margin:2px}
+.empty-state{text-align:center;padding:4rem 2rem;color:var(--muted)}
+.empty-icon{font-size:2.5rem;margin-bottom:1rem;opacity:0.2}
+.spinner-sm{width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:768px){.top-row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="index.html" class="nav-logo">RUG<span>RADAR</span></a>
+  <a href="index.html" class="nav-back">← Back to scanner</a>
+</nav>
+
+<div class="container">
+  <div class="page-label">Whale Feature</div>
+  <h1 class="page-title">Bulk Token Scanner</h1>
+  <p class="page-sub">Scan hundreds of tokens at once. Paste one contract address per line — RugRadar will scan them all and rank by risk level.</p>
+
+  <div class="top-row">
+    <div class="card">
+      <div class="card-title">Your Email</div>
+      <input id="emailInput" class="email-input" type="email" placeholder="Enter your Whale account email"/>
+    </div>
+    <div class="card">
+      <div class="card-title">Blockchain</div>
+      <select id="chainSelect" class="chain-select">
+        <option value="ETH">Ethereum</option>
+        <option value="BSC">BNB Chain</option>
+        <option value="BASE">Base</option>
+        <option value="ARB">Arbitrum</option>
+        <option value="SOL">Solana</option>
+        <option value="MATIC">Polygon</option>
+        <option value="AVAX">Avalanche</option>
+        <option value="FTM">Fantom</option>
+        <option value="OP">Optimism</option>
+        <option value="BLAST">Blast</option>
+        <option value="ZKERA">zkSync</option>
+        <option value="LINEA">Linea</option>
+        <option value="CRONOS">Cronos</option>
+        <option value="SCROLL">Scroll</option>
+        <option value="MANTA">Manta</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="input-section card">
+    <div class="card-title">Token Addresses — one per line</div>
+    <textarea id="addressInput" class="textarea" placeholder="0x6982508145454Ce325dDbE47a25d4ec3d2311933&#10;0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48&#10;0xdAC17F958D2ee523a2206206994597C13D831ec7&#10;...paste as many as you want"></textarea>
+  </div>
+
+  <div class="action-row">
+    <button class="btn btn-red" id="scanBtn" onclick="startBulkScan()">Scan All Tokens →</button>
+    <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
+    <span class="scan-counter" id="addrCount">0 addresses</span>
+  </div>
+
+  <div class="progress-bar" id="progressBar">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+  <div class="progress-label" id="progressLabel"></div>
+
+  <div id="resultsSection" style="display:none">
+    <div class="results-header">
+      <div class="results-title">Results</div>
+      <button class="export-btn" onclick="exportCSV()">Export CSV</button>
+    </div>
+    <div class="summary-pills" id="summaryPills"></div>
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:16px;overflow:hidden">
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th>Token</th>
+            <th>Address</th>
+            <th>Risk</th>
+            <th>Score</th>
+            <th>Flags</th>
+            <th>Price</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="emptyState" class="empty-state">
+    <div class="empty-icon">📋</div>
+    <p>Paste token addresses above and click Scan All Tokens</p>
+  </div>
+</div>
+
+<script>
+const API = 'https://rugradar-production.up.railway.app';
+const BATCH_SIZE = 10;
+let results = [];
+let isScanning = false;
+
+document.getElementById('addressInput').addEventListener('input', updateCount);
+
+function updateCount() {
+  const addrs = getAddresses();
+  document.getElementById('addrCount').textContent = `${addrs.length} address${addrs.length !== 1 ? 'es' : ''}`;
+}
+
+function getAddresses() {
+  return document.getElementById('addressInput').value
+    .split('\n')
+    .map(a => a.trim())
+    .filter(a => a.length > 10);
+}
+
+function clearAll() {
+  document.getElementById('addressInput').value = '';
+  document.getElementById('resultsSection').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'block';
+  document.getElementById('progressBar').style.display = 'none';
+  document.getElementById('progressLabel').textContent = '';
+  document.getElementById('addrCount').textContent = '0 addresses';
+  results = [];
+}
+
+async function startBulkScan() {
+  if (isScanning) return;
+  const email = document.getElementById('emailInput').value.trim();
+  const chain = document.getElementById('chainSelect').value;
+  const addresses = getAddresses();
+
+  if (!email) { alert('Please enter your Whale account email'); return; }
+  if (addresses.length === 0) { alert('Please paste at least one token address'); return; }
+
+  isScanning = true;
+  results = [];
+  const btn = document.getElementById('scanBtn');
+  btn.textContent = 'Scanning...';
+  btn.disabled = true;
+
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('resultsSection').style.display = 'block';
+  document.getElementById('progressBar').style.display = 'block';
+  document.getElementById('resultsBody').innerHTML = '';
+  document.getElementById('summaryPills').innerHTML = '';
+
+  // Add placeholder rows
+  addresses.forEach(addr => {
+    results.push({ address: addr, status: 'scanning' });
+    addTableRow({ address: addr, status: 'scanning' });
+  });
+
+  let completed = 0;
+
+  // Scan in batches of BATCH_SIZE
+  for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
+    const batch = addresses.slice(i, i + BATCH_SIZE);
+    const batchPromises = batch.map(address =>
+      fetch(`${API}/api/scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address, chain, email })
+      })
+      .then(r => r.json())
+      .then(data => ({ ...data, address }))
+      .catch(() => ({ address, error: true, risk: 'ERROR', score: 0, flags: [], safe: [], tokenInfo: { name: 'Error', symbol: '???' } }))
+    );
+
+    const batchResults = await Promise.all(batchPromises);
+
+    batchResults.forEach(result => {
+      completed++;
+      const idx = results.findIndex(r => r.address === result.address);
+      if (idx !== -1) results[idx] = result;
+      updateTableRow(result);
+      const pct = Math.round((completed / addresses.length) * 100);
+      document.getElementById('progressFill').style.width = pct + '%';
+      document.getElementById('progressLabel').textContent = `${completed} / ${addresses.length} scanned`;
+    });
+  }
+
+  // Sort by score descending
+  results.sort((a, b) => (b.score || 0) - (a.score || 0));
+  rebuildTable();
+  updateSummary();
+
+  btn.textContent = 'Scan All Tokens →';
+  btn.disabled = false;
+  isScanning = false;
+  document.getElementById('progressLabel').textContent = `✓ All ${addresses.length} tokens scanned`;
+}
+
+function addTableRow(r) {
+  const tbody = document.getElementById('resultsBody');
+  const tr = document.createElement('tr');
+  tr.id = `row-${r.address}`;
+  tr.innerHTML = `
+    <td><div class="token-name">—</div></td>
+    <td class="addr-cell">${r.address.slice(0,8)}...${r.address.slice(-6)}</td>
+    <td><span class="risk-badge badge-SCANNING">SCANNING</span></td>
+    <td><span class="spinner-sm"></span></td>
+    <td class="flags-cell">—</td>
+    <td class="addr-cell">—</td>`;
+  tbody.appendChild(tr);
+}
+
+function updateTableRow(r) {
+  const tr = document.getElementById(`row-${r.address}`);
+  if (!tr) return;
+  const flagsHtml = (r.flags || []).slice(0, 3).map(f => `<span class="flag-tag">${f.label}</span>`).join('');
+  const moreFlags = (r.flags || []).length > 3 ? `<span class="flag-tag">+${r.flags.length - 3}</span>` : '';
+  const priceStr = r.marketData?.priceUSD ? `$${fmt(r.marketData.priceUSD)}` : '—';
+  const badgeClass = r.error ? 'badge-ERROR' : `badge-${r.risk}`;
+  const riskLabel = r.error ? 'ERROR' : r.risk;
+  tr.innerHTML = `
+    <td><div class="token-name">${r.tokenInfo?.name || '—'} <span style="color:var(--muted);font-weight:400">(${r.tokenInfo?.symbol || '???'})</span></div></td>
+    <td class="addr-cell">${r.address.slice(0,8)}...${r.address.slice(-6)}</td>
+    <td><span class="risk-badge ${badgeClass}">${riskLabel}</span></td>
+    <td><span class="score-num" style="color:${r.risk === 'HIGH' ? '#ff6b6b' : r.risk === 'MEDIUM' ? '#ffd060' : '#00d97e'}">${r.score || 0}</span></td>
+    <td class="flags-cell">${flagsHtml}${moreFlags}</td>
+    <td class="addr-cell">${priceStr}</td>`;
+}
+
+function rebuildTable() {
+  const tbody = document.getElementById('resultsBody');
+  tbody.innerHTML = '';
+  results.forEach(r => { addTableRow(r); updateTableRow(r); });
+}
+
+function updateSummary() {
+  const high   = results.filter(r => r.risk === 'HIGH').length;
+  const medium = results.filter(r => r.risk === 'MEDIUM').length;
+  const low    = results.filter(r => r.risk === 'LOW').length;
+  document.getElementById('summaryPills').innerHTML = `
+    <span class="pill pill-high">⚠ ${high} High Risk</span>
+    <span class="pill pill-medium">~ ${medium} Medium Risk</span>
+    <span class="pill pill-low">✓ ${low} Low Risk</span>
+    <span class="pill pill-scanning">${results.length} Total Scanned</span>`;
+}
+
+function exportCSV() {
+  const rows = [['Token Name', 'Symbol', 'Address', 'Risk', 'Score', 'Flags', 'Price USD', 'Liquidity USD']];
+  results.forEach(r => {
+    rows.push([
+      r.tokenInfo?.name || '',
+      r.tokenInfo?.symbol || '',
+      r.address,
+      r.risk || '',
+      r.score || 0,
+      (r.flags || []).map(f => f.label).join('; '),
+      r.marketData?.priceUSD || '',
+      r.marketData?.liquidityUSD || '',
+    ]);
+  });
+  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `rugradar-bulk-scan-${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+}
+
+function fmt(n) {
+  if (!n) return '0';
+  if (n < 0.0001) return n.toExponential(2);
+  if (n < 1) return n.toFixed(6);
+  return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+</script>
+</body>
+</html>
