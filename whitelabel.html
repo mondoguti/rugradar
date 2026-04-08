@@ -98,6 +98,26 @@ nav{padding:1.25rem 2rem;display:flex;align-items:center;justify-content:space-b
     <!-- FORM -->
     <div>
       <!-- Upgrade banner — shown if not subscribed -->
+      <!-- Whale upsell banner — shown when user is on Whale but not white-label -->
+      <div id="whaleBanner" style="display:none;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.25);border-radius:12px;padding:1.5rem;margin-bottom:1rem">
+        <div style="display:flex;align-items:flex-start;gap:14px">
+          <div style="font-size:2rem;flex-shrink:0">🐋</div>
+          <div style="flex:1">
+            <div style="font-size:15px;font-weight:700;color:#a78bfa;margin-bottom:6px">You're on Whale — unlock White-Label for $149/mo</div>
+            <div style="font-size:13px;color:var(--muted);margin-bottom:1rem;line-height:1.7">
+              As a Whale user you're one step away from having your own branded scanner. 
+              Add White-Label and get a custom URL with your name, logo, and colors to share with your community — 
+              <strong style="color:var(--text)">powered by RugRadar behind the scenes.</strong>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+              <button onclick="buyWhiteLabel()" style="background:linear-gradient(135deg,#d97706,#b45309);border:none;color:#fff;padding:11px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Add White-Label — $149/mo →</button>
+              <span style="font-size:12px;color:var(--muted)">Cancel anytime · Instant setup · Self-serve</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Generic upgrade banner — shown when user is free/pro -->
       <div id="upgradeBanner" style="display:none;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);border-radius:12px;padding:1.25rem;margin-bottom:1rem">
         <div style="font-size:14px;font-weight:700;color:#fbbf24;margin-bottom:6px">🏷 White-Label Add-on Required</div>
         <div style="font-size:13px;color:var(--muted);margin-bottom:1rem;line-height:1.6">You need the White-Label add-on ($149/month) to create a branded URL. Your current plan doesn't include it.</div>
@@ -248,11 +268,26 @@ async function checkWhitelabelAccess() {
   try {
     const r = await fetch(`${API}/api/user/${encodeURIComponent(email)}`);
     const d = await r.json();
-    const hasAccess = d.plan === 'whale' || d.whitelabel_active;
-    document.getElementById('upgradeBanner').style.display = hasAccess ? 'none' : 'block';
-    document.getElementById('generateBtn').disabled = !hasAccess;
-    if (!hasAccess) document.getElementById('generateBtn').textContent = '🔒 White-Label Add-on Required';
-    else document.getElementById('generateBtn').textContent = '🏷 Generate My Branded URL';
+    const hasAccess = d.whitelabel_active;
+    const isWhale = d.plan === 'whale';
+    // Hide all banners first
+    document.getElementById('upgradeBanner').style.display = 'none';
+    document.getElementById('whaleBanner').style.display = 'none';
+    if (hasAccess) {
+      // Full access — show form
+      document.getElementById('generateBtn').disabled = false;
+      document.getElementById('generateBtn').textContent = '🏷 Generate My Branded URL';
+    } else if (isWhale) {
+      // Whale but no white-label — show whale upsell
+      document.getElementById('whaleBanner').style.display = 'block';
+      document.getElementById('generateBtn').disabled = true;
+      document.getElementById('generateBtn').textContent = '🔒 Add White-Label to Unlock';
+    } else {
+      // Free or Pro — show generic upgrade banner
+      document.getElementById('upgradeBanner').style.display = 'block';
+      document.getElementById('generateBtn').disabled = true;
+      document.getElementById('generateBtn').textContent = '🔒 White-Label Add-on Required';
+    }
   } catch (e) {}
 }
 
