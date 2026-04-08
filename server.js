@@ -83,4 +83,23 @@ app.get('/api/user/:email', async (req, res) => {
     res.json({ email: user.email, plan: user.plan, unlimited: user.plan !== 'free', scansToday, scansLeft: user.plan !== 'free' ? 999 : Math.max(0, 3 - scansToday) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+app.post('/api/webhook', (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    const email = session.metadata?.email;
+    const plan = session.metadata?.plan;
+    if (email && plan) {
+      supabase.from('users').upsert({ email, plan, stripe_customer_id: session.customer, stripe_subscription_id: session.subscription }, { onConflict: 'email' })
+        .then(() => console.log(`✅ Upgraded ${email} to ${plan}`));
+    }
+  }
+  res.json({ received: true });
+});
 app.listen(PORT, () => console.log(`RugRadar running on port ${PORT}`));
