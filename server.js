@@ -20,21 +20,21 @@ const PRICES = {
 
 // ── CHAIN CONFIG ──────────────────────────────────────────────────────────────
 const CHAIN_CONFIG = {
-  ETH:    { goplusId: '1',       etherscanBase: 'https://api.etherscan.io/v2/api',        name: 'Ethereum' },
-  BSC:    { goplusId: '56',      etherscanBase: 'https://api.bscscan.com/api',            name: 'BNB Chain' },
-  BASE:   { goplusId: '8453',    etherscanBase: 'https://api.basescan.org/api',           name: 'Base' },
-  ARB:    { goplusId: '42161',   etherscanBase: 'https://api.arbiscan.io/api',            name: 'Arbitrum' },
-  SOL:    { goplusId: 'solana',  etherscanBase: null,                                     name: 'Solana' },
-  MATIC:  { goplusId: '137',     etherscanBase: 'https://api.polygonscan.com/api',        name: 'Polygon' },
-  AVAX:   { goplusId: '43114',   etherscanBase: 'https://api.snowtrace.io/api',           name: 'Avalanche' },
-  FTM:    { goplusId: '250',     etherscanBase: 'https://api.ftmscan.com/api',            name: 'Fantom' },
-  OP:     { goplusId: '10',      etherscanBase: 'https://api-optimistic.etherscan.io/api',name: 'Optimism' },
-  BLAST:  { goplusId: '81457',   etherscanBase: null,                                     name: 'Blast' },
-  ZKERA:  { goplusId: '324',     etherscanBase: null,                                     name: 'zkSync' },
-  LINEA:  { goplusId: '59144',   etherscanBase: null,                                     name: 'Linea' },
-  CRONOS: { goplusId: '25',      etherscanBase: null,                                     name: 'Cronos' },
-  SCROLL: { goplusId: '534352',  etherscanBase: null,                                     name: 'Scroll' },
-  MANTA:  { goplusId: '169',     etherscanBase: null,                                     name: 'Manta' },
+  ETH:    { goplusId: '1',       etherscanBase: 'https://api.etherscan.io/v2/api',         name: 'Ethereum' },
+  BSC:    { goplusId: '56',      etherscanBase: 'https://api.bscscan.com/api',             name: 'BNB Chain' },
+  BASE:   { goplusId: '8453',    etherscanBase: 'https://api.basescan.org/api',            name: 'Base' },
+  ARB:    { goplusId: '42161',   etherscanBase: 'https://api.arbiscan.io/api',             name: 'Arbitrum' },
+  SOL:    { goplusId: 'solana',  etherscanBase: null,                                      name: 'Solana' },
+  MATIC:  { goplusId: '137',     etherscanBase: 'https://api.polygonscan.com/api',         name: 'Polygon' },
+  AVAX:   { goplusId: '43114',   etherscanBase: 'https://api.snowtrace.io/api',            name: 'Avalanche' },
+  FTM:    { goplusId: '250',     etherscanBase: 'https://api.ftmscan.com/api',             name: 'Fantom' },
+  OP:     { goplusId: '10',      etherscanBase: 'https://api-optimistic.etherscan.io/api', name: 'Optimism' },
+  BLAST:  { goplusId: '81457',   etherscanBase: null,                                      name: 'Blast' },
+  ZKERA:  { goplusId: '324',     etherscanBase: null,                                      name: 'zkSync' },
+  LINEA:  { goplusId: '59144',   etherscanBase: null,                                      name: 'Linea' },
+  CRONOS: { goplusId: '25',      etherscanBase: null,                                      name: 'Cronos' },
+  SCROLL: { goplusId: '534352',  etherscanBase: null,                                      name: 'Scroll' },
+  MANTA:  { goplusId: '169',     etherscanBase: null,                                      name: 'Manta' },
 };
 
 // ── MIDDLEWARE ────────────────────────────────────────────────────────────────
@@ -249,6 +249,70 @@ app.post('/api/webhook', (req, res) => {
       .then(({ data: user }) => { if (user) supabase.from('users').update({ plan: 'free' }).eq('email', user.email); });
   }
   res.json({ received: true });
+});
+
+// ── API KEY ROUTES ────────────────────────────────────────────────────────────
+
+app.post('/api/keys/generate', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email required' });
+  try {
+    const { data: user } = await supabase.from('users').select('*').eq('email', email).single();
+    if (!user || user.plan !== 'whale') return res.status(403).json({ error: 'Whale plan required for API access' });
+    const { data: existing } = await supabase.from('api_keys').select('*').eq('user_email', email).single();
+    if (existing) return res.json({ apiKey: existing.api_key, created: false });
+    const { data: newKey, error } = await supabase.from('api_keys').insert({ user_email: email }).select().single();
+    if (error) throw error;
+    res.json({ apiKey: newKey.api_key, created: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/keys/:email', async (req, res) => {
+  try {
+    const email = decodeURIComponent(req.params.email);
+    const { data: user } = await supabase.from('users').select('*').eq('email', email).single();
+    if (!user || user.plan !== 'whale') return res.status(403).json({ error: 'Whale plan required' });
+    const { data: key } = await supabase.from('api_keys').select('*').eq('user_email', email).single();
+    if (!key) return res.json({ apiKey: null });
+    res.json({ apiKey: key.api_key, requestsToday: key.requests_today, lastUsed: key.last_used });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/v1/scan', async (req, res) => {
+  const apiKey = req.headers['x-api-key'];
+  if (!apiKey) return res.status(401).json({ error: 'API key required. Add header: x-api-key: your_key' });
+  try {
+    const { data: keyData } = await supabase.from('api_keys').select('*').eq('api_key', apiKey).single();
+    if (!keyData) return res.status(401).json({ error: 'Invalid API key' });
+    const today = new Date().toISOString().split('T')[0];
+    if (keyData.request_date !== today) {
+      await supabase.from('api_keys').update({ requests_today: 0, request_date: today }).eq('api_key', apiKey);
+      keyData.requests_today = 0;
+    }
+    if (keyData.requests_today >= 1000) return res.status(429).json({ error: 'Daily limit of 1000 API requests reached' });
+    await supabase.from('api_keys').update({ requests_today: keyData.requests_today + 1, last_used: new Date().toISOString() }).eq('api_key', apiKey);
+    const { address, chain = 'ETH' } = req.body;
+    if (!address || address.length < 10) return res.status(400).json({ error: 'Invalid address' });
+    const chainCfg = CHAIN_CONFIG[chain];
+    if (!chainCfg) return res.status(400).json({ error: 'Unsupported chain' });
+    const [gp, hp, dx, eth] = await Promise.allSettled([
+      fetchGoPlus(address, chainCfg.goplusId),
+      fetchHoneypot(address, chainCfg.goplusId),
+      fetchDexScreener(address),
+      fetchEtherscan(address, chainCfg.goplusId),
+    ]);
+    const goplusData   = gp.status  === 'fulfilled' ? gp.value  : null;
+    const honeypotData = hp.status  === 'fulfilled' ? hp.value  : null;
+    const dexData      = dx.status  === 'fulfilled' ? dx.value  : null;
+    const ethData      = eth.status === 'fulfilled' ? eth.value : null;
+    const { score, risk, flags, safe } = calculateScore(goplusData, honeypotData, dexData, ethData);
+    res.json({
+      address, chain, chainName: chainCfg.name, score, risk, flags, safe,
+      tokenInfo: { name: goplusData?.token_name || dexData?.baseToken?.name || 'Unknown', symbol: goplusData?.token_symbol || dexData?.baseToken?.symbol || '???' },
+      marketData: dexData ? { priceUSD: parseFloat(dexData.priceUsd || 0), liquidityUSD: parseFloat(dexData.liquidity?.usd || 0), priceChange24h: parseFloat(dexData.priceChange?.h24 || 0) } : null,
+      scannedAt: new Date().toISOString(),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.listen(PORT, () => console.log(`🛡 RugRadar running on port ${PORT} — ${Object.keys(CHAIN_CONFIG).length} chains supported`));
