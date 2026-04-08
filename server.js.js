@@ -179,86 +179,100 @@ function calculateScore(goplus, honeypot, dex, etherscan) {
   let score = 0;
   const flags = [], safe = [];
 
+  // ── NO DATA AT ALL = very suspicious ──
+  if (!goplus && !honeypot) {
+    score += 30;
+    flags.push({ label: 'No Security Data', desc: 'Could not fetch security info — extreme caution advised', severity: 'critical' });
+  }
+
   // ── HONEYPOT (instant critical) ──
   const isHoneypot = goplus?.is_honeypot === '1' || honeypot?.honeypotResult?.isHoneypot === true;
-  isHoneypot
-    ? (score += 40, flags.push({ label: 'Honeypot Detected', desc: 'Cannot sell — funds will be trapped', severity: 'critical' }))
-    : safe.push({ label: 'Honeypot Test', desc: 'Token can be bought and sold freely' });
+  if (isHoneypot) {
+    score += 50;
+    flags.push({ label: 'Honeypot Detected', desc: 'Cannot sell — funds will be permanently trapped', severity: 'critical' });
+  } else if (goplus || honeypot) {
+    safe.push({ label: 'Honeypot Test', desc: 'Token can be bought and sold freely' });
+  }
 
   // ── TAX ──
   const buyTax  = parseFloat(goplus?.buy_tax  || honeypot?.simulationResult?.buyTax  || 0);
   const sellTax = parseFloat(goplus?.sell_tax || honeypot?.simulationResult?.sellTax || 0);
-  if (sellTax > 20 || buyTax > 20)      { score += 20; flags.push({ label: 'Extreme Tax',   desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%`, severity: 'critical' }); }
-  else if (sellTax > 10 || buyTax > 10) { score += 12; flags.push({ label: 'High Tax',      desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%`, severity: 'high' }); }
-  else if (sellTax > 5 || buyTax > 5)   { score += 5;  flags.push({ label: 'Moderate Tax',  desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%`, severity: 'medium' }); }
-  else safe.push({ label: 'Tax Rate', desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%` });
+  if (sellTax > 20 || buyTax > 20)      { score += 25; flags.push({ label: 'Extreme Tax',   desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}% — nearly all funds taken`, severity: 'critical' }); }
+  else if (sellTax > 10 || buyTax > 10) { score += 15; flags.push({ label: 'High Tax',      desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%`, severity: 'high' }); }
+  else if (sellTax > 5  || buyTax > 5)  { score += 6;  flags.push({ label: 'Moderate Tax',  desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%`, severity: 'medium' }); }
+  else if (goplus) safe.push({ label: 'Tax Rate', desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%` });
 
   // ── MINTABLE ──
   const isMintable = goplus?.is_mintable === '1';
-  isMintable
-    ? (score += 15, flags.push({ label: 'Mintable Supply', desc: 'Owner can print unlimited tokens', severity: 'high' }))
-    : safe.push({ label: 'Fixed Supply', desc: 'Cannot mint new tokens' });
+  if (isMintable) { score += 18; flags.push({ label: 'Mintable Supply', desc: 'Owner can create unlimited new tokens at any time', severity: 'high' }); }
+  else if (goplus) safe.push({ label: 'Fixed Supply', desc: 'Cannot mint new tokens' });
 
   // ── OWNER ACTIVE ──
-  const renounced = goplus?.owner_address === '0x0000000000000000000000000000000000000000';
-  const ownerActive = !renounced && goplus?.owner_address;
-  ownerActive
-    ? (score += 15, flags.push({ label: 'Owner Active', desc: 'Contract not renounced — owner can modify', severity: 'high' }))
-    : safe.push({ label: 'Contract Renounced', desc: 'Owner gave up control' });
+  const renounced = !goplus?.owner_address || goplus?.owner_address === '0x0000000000000000000000000000000000000000';
+  const ownerActive = !renounced && !!goplus?.owner_address;
+  if (ownerActive) { score += 18; flags.push({ label: 'Owner Active', desc: 'Contract not renounced — owner retains full control', severity: 'high' }); }
+  else if (goplus) safe.push({ label: 'Contract Renounced', desc: 'Owner gave up control' });
 
-  // ── LIQUIDITY LOCK (the #1 rug signal) ──
-  const lpUnlocked = goplus?.lp_locked !== '1';
-  lpUnlocked
-    ? (score += 25, flags.push({ label: 'Liquidity Unlocked', desc: 'LP can be removed anytime — rug risk', severity: 'critical' }))
-    : safe.push({ label: 'Liquidity Locked', desc: 'LP cannot be removed' });
+  // ── LIQUIDITY LOCK — #1 rug signal ──
+  // Only mark as LOCKED if explicitly confirmed locked. Treat unknown/missing as unlocked.
+  const lpLocked = goplus?.lp_locked === '1';
+  const lpUnlocked = !lpLocked;
+  if (lpUnlocked) {
+    score += 28;
+    flags.push({ label: 'Liquidity Unlocked', desc: 'LP tokens not locked — dev can remove all liquidity instantly', severity: 'critical' });
+  } else {
+    safe.push({ label: 'Liquidity Locked', desc: 'LP cannot be removed — rug protection active' });
+  }
 
   // ── CONTRACT TRICKS ──
-  goplus?.is_proxy       === '1' && (score += 12, flags.push({ label: 'Proxy Contract',      desc: 'Contract logic can be swapped without warning', severity: 'high' }));
-  goplus?.hidden_owner   === '1' && (score += 12, flags.push({ label: 'Hidden Owner',        desc: 'Concealed owner can reclaim control', severity: 'high' }));
-  goplus?.is_blacklisted === '1' && (score += 10, flags.push({ label: 'Blacklist Function', desc: 'Owner can block wallets from selling', severity: 'high' }));
-  goplus?.can_take_back_ownership === '1' && (score += 10, flags.push({ label: 'Reclaim Ownership', desc: 'Renouncement can be reversed', severity: 'high' }));
-  goplus?.transfer_pausable === '1' && (score += 8, flags.push({ label: 'Transfer Pausable', desc: 'Owner can freeze all transfers', severity: 'medium' }));
+  if (goplus?.is_proxy === '1')               { score += 14; flags.push({ label: 'Proxy Contract',      desc: 'Contract logic can be swapped without warning', severity: 'high' }); }
+  if (goplus?.hidden_owner === '1')           { score += 14; flags.push({ label: 'Hidden Owner',        desc: 'Concealed owner can reclaim full control', severity: 'critical' }); }
+  if (goplus?.is_blacklisted === '1')         { score += 12; flags.push({ label: 'Blacklist Function',  desc: 'Owner can block any wallet from selling', severity: 'high' }); }
+  if (goplus?.can_take_back_ownership === '1'){ score += 12; flags.push({ label: 'Reclaim Ownership',   desc: 'Renouncement can be silently reversed', severity: 'high' }); }
+  if (goplus?.transfer_pausable === '1')      { score += 10; flags.push({ label: 'Transfer Pausable',   desc: 'Owner can freeze all transfers instantly', severity: 'high' }); }
+  if (goplus?.selfdestruct === '1')           { score += 20; flags.push({ label: 'Self-Destruct',       desc: 'Contract can be destroyed — all funds lost', severity: 'critical' }); }
 
   // ── HOLDER CONCENTRATION ──
   const topHolder = parseFloat(goplus?.holders?.[0]?.percent || 0) * 100;
-  if (topHolder > 50)      { score += 15; flags.push({ label: 'Whale Concentration', desc: `Top wallet holds ${topHolder.toFixed(1)}%`, severity: 'critical' }); }
+  if (topHolder > 70)      { score += 20; flags.push({ label: 'Extreme Whale', desc: `Top wallet holds ${topHolder.toFixed(1)}% — single dump could crash price`, severity: 'critical' }); }
+  else if (topHolder > 50) { score += 15; flags.push({ label: 'Whale Concentration', desc: `Top wallet holds ${topHolder.toFixed(1)}%`, severity: 'critical' }); }
   else if (topHolder > 30) { score += 8;  flags.push({ label: 'High Concentration',  desc: `Top wallet holds ${topHolder.toFixed(1)}%`, severity: 'high' }); }
-  else if (topHolder > 15) { score += 3;  flags.push({ label: 'Moderate Concentration', desc: `Top wallet holds ${topHolder.toFixed(1)}%`, severity: 'medium' }); }
+  else if (topHolder > 15) { score += 4;  flags.push({ label: 'Moderate Concentration', desc: `Top wallet holds ${topHolder.toFixed(1)}%`, severity: 'medium' }); }
   else if (topHolder > 0)  safe.push({ label: 'Holder Distribution', desc: `Top wallet holds ${topHolder.toFixed(1)}%` });
 
-  // ── HOLDER COUNT (very few holders = pump & dump) ──
+  // ── HOLDER COUNT ──
   const holderCount = parseInt(goplus?.holder_count || 0);
-  if (holderCount > 0 && holderCount < 50)       { score += 10; flags.push({ label: 'Extremely Few Holders', desc: `Only ${holderCount} holders — likely pump & dump`, severity: 'high' }); }
-  else if (holderCount >= 50 && holderCount < 200) { score += 5;  flags.push({ label: 'Low Holder Count', desc: `Only ${holderCount} holders`, severity: 'medium' }); }
+  if (holderCount > 0 && holderCount < 30)        { score += 15; flags.push({ label: 'Extremely Few Holders', desc: `Only ${holderCount} holders — very likely pump & dump`, severity: 'critical' }); }
+  else if (holderCount >= 30 && holderCount < 100) { score += 10; flags.push({ label: 'Very Few Holders', desc: `Only ${holderCount} holders — pump & dump risk`, severity: 'high' }); }
+  else if (holderCount >= 100 && holderCount < 300){ score += 5;  flags.push({ label: 'Low Holder Count', desc: `${holderCount} holders`, severity: 'medium' }); }
 
   // ── CONTRACT VERIFICATION ──
   if (etherscan) {
-    etherscan.SourceCode === ''
-      ? (score += 8, flags.push({ label: 'Unverified Contract', desc: 'Source code is hidden — cannot be audited', severity: 'high' }))
-      : safe.push({ label: 'Verified Contract', desc: 'Source code is publicly auditable' });
+    if (etherscan.SourceCode === '') { score += 10; flags.push({ label: 'Unverified Contract', desc: 'Source code hidden — contract cannot be audited', severity: 'high' }); }
+    else safe.push({ label: 'Verified Contract', desc: 'Source code is publicly auditable' });
   }
 
   // ── LIQUIDITY AMOUNT ──
   const liqUSD = parseFloat(dex?.liquidity?.usd || 0);
-  if (liqUSD === 0)                    { score += 15; flags.push({ label: 'No Liquidity Data', desc: 'No liquidity found — extreme caution', severity: 'critical' }); }
-  else if (liqUSD > 0 && liqUSD < 5000)  { score += 10; flags.push({ label: 'Very Low Liquidity', desc: `Only $${liqUSD.toLocaleString()} — easy to manipulate`, severity: 'high' }); }
-  else if (liqUSD >= 5000 && liqUSD < 20000) { score += 3; flags.push({ label: 'Low Liquidity', desc: `$${liqUSD.toLocaleString()} in liquidity`, severity: 'medium' }); }
+  if (liqUSD === 0 && dex)             { score += 15; flags.push({ label: 'Zero Liquidity', desc: 'No liquidity pool found — cannot trade safely', severity: 'critical' }); }
+  else if (liqUSD > 0 && liqUSD < 1000)  { score += 15; flags.push({ label: 'Dangerously Low Liquidity', desc: `Only $${liqUSD.toLocaleString()} — easily manipulated`, severity: 'critical' }); }
+  else if (liqUSD >= 1000 && liqUSD < 5000)  { score += 10; flags.push({ label: 'Very Low Liquidity', desc: `Only $${liqUSD.toLocaleString()}`, severity: 'high' }); }
+  else if (liqUSD >= 5000 && liqUSD < 20000) { score += 4;  flags.push({ label: 'Low Liquidity', desc: `$${liqUSD.toLocaleString()} in liquidity`, severity: 'medium' }); }
   else if (liqUSD >= 20000) safe.push({ label: 'Liquidity', desc: `$${liqUSD.toLocaleString()} in liquidity` });
 
-  // ── COMPOUNDING: multiple red flags together = much worse ──
-  const criticalCount = flags.filter(f => f.severity === 'critical' || f.severity === 'high').length;
-  if (criticalCount >= 3) score += 15;
-  else if (criticalCount >= 2) score += 8;
+  // ── COMPOUNDING: multiple serious flags = much worse ──
+  const criticalFlags = flags.filter(f => f.severity === 'critical').length;
+  const highFlags = flags.filter(f => f.severity === 'high').length;
+  if (criticalFlags >= 3) score += 20;
+  else if (criticalFlags >= 2) score += 12;
+  else if (criticalFlags >= 1 && highFlags >= 2) score += 8;
 
-  // Deadly combo: unlocked LP + owner active + mintable = almost certain rug
-  if (lpUnlocked && ownerActive && isMintable) score += 15;
-  // Unlocked LP + owner active = very dangerous even without mint
-  else if (lpUnlocked && ownerActive) score += 10;
+  // Deadly combos
+  if (lpUnlocked && ownerActive && isMintable) score += 20; // triple threat
+  else if (lpUnlocked && ownerActive) score += 12;
+  else if (lpUnlocked && isMintable) score += 10;
 
-  // ── NO DATA AT ALL = suspicious ──
-  if (!goplus && !honeypot) { score += 20; flags.push({ label: 'No Security Data', desc: 'Could not fetch any security info — proceed with extreme caution', severity: 'critical' }); }
-
-  return { score: Math.min(score, 100), risk: score >= 35 ? 'HIGH' : score >= 18 ? 'MEDIUM' : 'LOW', flags, safe };
+  return { score: Math.min(score, 100), risk: score >= 30 ? 'HIGH' : score >= 15 ? 'MEDIUM' : 'LOW', flags, safe };
 }
 
 // ── ROUTES ────────────────────────────────────────────────────────────────────
