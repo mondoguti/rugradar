@@ -19,6 +19,76 @@ const PRICES = {
 };
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || null;
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || null;
+
+// Store pending verifications: code -> email
+const pendingVerifications = {};
+
+async function sendTelegramMessage(chatId, text) {
+  if (!TELEGRAM_BOT_TOKEN) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+    });
+  } catch (e) { console.error('Telegram error:', e.message); }
+}
+
+async function sendTelegramAlert(email, tokenName, tokenSymbol, riskScore, address, chain) {
+  if (!TELEGRAM_BOT_TOKEN) return;
+  try {
+    const { data: user } = await supabase.from('users').select('telegram_chat_id').eq('email', email).single();
+    if (!user?.telegram_chat_id) return;
+    const msg = `⚠️ <b>HIGH RISK ALERT</b>\n\n<b>${tokenName} (${tokenSymbol})</b>\nRisk Score: <b>${riskScore}/100</b>\nChain: ${chain}\nAddress: <code>${address.slice(0,12)}...${address.slice(-8)}</code>\n\n🔗 <a href="https://rugradar-rho.vercel.app">View on RugRadar</a>`;
+    await sendTelegramMessage(user.telegram_chat_id, msg);
+    console.log(`📱 Telegram alert sent to ${email}`);
+  } catch (e) { console.error('Telegram alert error:', e.message); }
+}
+
+// Poll for Telegram bot messages
+async function startTelegramPolling() {
+  if (!TELEGRAM_BOT_TOKEN) return;
+  let offset = 0;
+  console.log('📱 Telegram bot polling started — @RugRadarScanBot');
+  const poll = async () => {
+    try {
+      const r = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates?offset=${offset}&timeout=30`);
+      const data = await r.json();
+      if (data.ok && data.result?.length) {
+        for (const update of data.result) {
+          offset = update.update_id + 1;
+          const msg = update.message;
+          if (!msg?.text) continue;
+          const chatId = msg.chat.id;
+          const text = msg.text.trim();
+          if (text === '/start' || text.startsWith('/start ')) {
+            const code = text.split(' ')[1];
+            if (code && pendingVerifications[code]) {
+              const email = pendingVerifications[code];
+              await supabase.from('users').update({ telegram_chat_id: chatId.toString() }).eq('email', email);
+              delete pendingVerifications[code];
+              await sendTelegramMessage(chatId, `✅ Connected! Your Telegram is now linked to ${email}.\n\nYou'll receive alerts here when any watched token turns HIGH RISK.`);
+            } else {
+              await sendTelegramMessage(chatId, `👋 Welcome to RugRadar!\n\nTo connect your account, go to your watchlist and click "Connect Telegram".`);
+            }
+          } else if (text === '/status') {
+            const { data: user } = await supabase.from('users').select('email,plan').eq('telegram_chat_id', chatId.toString()).single();
+            if (user) await sendTelegramMessage(chatId, `✅ Connected as: ${user.email}\nPlan: ${user.plan.toUpperCase()}`);
+            else await sendTelegramMessage(chatId, '❌ Not connected. Visit RugRadar to link your account.');
+          } else if (text === '/disconnect') {
+            await supabase.from('users').update({ telegram_chat_id: null }).eq('telegram_chat_id', chatId.toString());
+            await sendTelegramMessage(chatId, '✅ Disconnected. You will no longer receive alerts.');
+          }
+        }
+      }
+    } catch (e) { console.error('Poll error:', e.message); }
+    setTimeout(poll, 2000);
+  };
+  poll();
+}
+
+
 
 async function sendAlertEmail(email, tokenName, tokenSymbol, riskLevel, riskScore, address, chain) {
   if (!RESEND_API_KEY) return;
@@ -374,8 +444,44 @@ app.post('/api/watchlist/update', async (req, res) => {
       last_checked: new Date().toISOString()
     }).eq('user_email', email).eq('address', address).eq('chain', chain);
     const emailSent = riskLevel === 'HIGH' && existing?.last_risk_level !== 'HIGH';
-    if (emailSent) await sendAlertEmail(email, tokenName, tokenSymbol, riskLevel, riskScore, address, chain);
+    if (emailSent) {
+      await sendAlertEmail(email, tokenName, tokenSymbol, riskLevel, riskScore, address, chain);
+      await sendTelegramAlert(email, tokenName, tokenSymbol, riskScore, address, chain);
+    }
     res.json({ success: true, emailSent });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-app.listen(PORT, () => console.log(`🛡 RugRadar running on port ${PORT} — ${Object.keys(CHAIN_CONFIG).length} chains supported`));
+
+// ── TELEGRAM ROUTES ───────────────────────────────────────────────────────────
+app.post('/api/telegram/connect', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email required' });
+  try {
+    const { data: user } = await supabase.from('users').select('*').eq('email', email).single();
+    if (!user || user.plan !== 'whale') return res.status(403).json({ error: 'Whale plan required' });
+    const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+    pendingVerifications[code] = email;
+    setTimeout(() => delete pendingVerifications[code], 10 * 60 * 1000); // expire in 10 min
+    res.json({ code, botUsername: 'RugRadarScanBot', deepLink: `https://t.me/RugRadarScanBot?start=${code}` });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/telegram/status/:email', async (req, res) => {
+  try {
+    const { data: user } = await supabase.from('users').select('telegram_chat_id').eq('email', decodeURIComponent(req.params.email)).single();
+    res.json({ connected: !!user?.telegram_chat_id });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/telegram/disconnect', async (req, res) => {
+  const { email } = req.body;
+  try {
+    await supabase.from('users').update({ telegram_chat_id: null }).eq('email', email);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.listen(PORT, () => {
+  console.log(`🛡 RugRadar running on port ${PORT} — ${Object.keys(CHAIN_CONFIG).length} chains supported`);
+  startTelegramPolling();
+});

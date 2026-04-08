@@ -103,6 +103,18 @@ nav{padding:1.25rem 2rem;display:flex;align-items:center;justify-content:space-b
     <div class="input-row">
       <input id="emailInput" class="text-input" type="email" placeholder="Your Whale account email" onblur="loadWatchlist()"/>
     </div>
+    <div id="telegramSection" style="display:none;background:rgba(0,136,204,0.08);border:1px solid rgba(0,136,204,0.2);border-radius:10px;padding:1rem;margin-bottom:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:3px">📱 Telegram Alerts</div>
+          <div id="tgStatus" style="font-size:12px;color:var(--muted)">Not connected</div>
+        </div>
+        <button id="tgBtn" onclick="connectTelegram()" style="background:#0088cc;border:none;color:#fff;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Connect Telegram</button>
+      </div>
+      <div id="tgCode" style="display:none;margin-top:10px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:12px;font-size:13px;color:var(--muted);line-height:1.7"></div>
+    </div>
+    <div style="display:none">
+    </div>
     <div class="chain-row">
       <button class="cpill active" onclick="setChain('ETH',this)">ETH</button>
       <button class="cpill" onclick="setChain('BSC',this)">BSC</button>
@@ -172,6 +184,7 @@ async function loadWatchlist() {
     }
     watchlist = data;
     document.getElementById('watchCount').textContent = `(${watchlist.length})`;
+    checkTelegram(email);
     renderWatchlist();
     checkAlerts();
   } catch (e) {
@@ -338,6 +351,60 @@ async function refreshAll() {
   icon.classList.remove('spinning');
   document.getElementById('lastRefresh').textContent = `Last refreshed: ${new Date().toLocaleTimeString()}`;
   checkAlerts();
+}
+
+async function checkTelegram(email) {
+  try {
+    const r = await fetch(`${API}/api/telegram/status/${encodeURIComponent(email)}`);
+    const d = await r.json();
+    document.getElementById('telegramSection').style.display = 'block';
+    if (d.connected) {
+      document.getElementById('tgStatus').textContent = '✅ Connected — alerts active';
+      document.getElementById('tgStatus').style.color = 'var(--safe)';
+      document.getElementById('tgBtn').textContent = 'Disconnect';
+      document.getElementById('tgBtn').onclick = disconnectTelegram;
+      document.getElementById('tgBtn').style.background = 'rgba(255,59,59,0.15)';
+      document.getElementById('tgBtn').style.color = '#ff6b6b';
+      document.getElementById('tgBtn').style.border = '1px solid rgba(255,59,59,0.3)';
+    } else {
+      document.getElementById('tgStatus').textContent = 'Not connected';
+      document.getElementById('tgStatus').style.color = 'var(--muted)';
+      document.getElementById('tgBtn').textContent = 'Connect Telegram';
+      document.getElementById('tgBtn').onclick = connectTelegram;
+      document.getElementById('tgBtn').style.background = '#0088cc';
+      document.getElementById('tgBtn').style.color = '#fff';
+    }
+  } catch (e) {}
+}
+
+async function connectTelegram() {
+  const email = getEmail();
+  if (!email) { showAlert('Enter your email first', 'error'); return; }
+  try {
+    const r = await fetch(`${API}/api/telegram/connect`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const d = await r.json();
+    if (!r.ok) { showAlert(d.error, 'error'); return; }
+    document.getElementById('tgCode').style.display = 'block';
+    document.getElementById('tgCode').innerHTML = `1. Click this link: <a href="${d.deepLink}" target="_blank" style="color:#0088cc;font-weight:600">Open @RugRadarScanBot in Telegram →</a><br>2. Press <b style="color:var(--text)">Start</b> in the Telegram chat<br>3. Done! Alerts will arrive here automatically.`;
+    setTimeout(() => checkTelegram(email), 5000);
+    setTimeout(() => checkTelegram(email), 10000);
+  } catch (e) { showAlert('Failed to connect Telegram', 'error'); }
+}
+
+async function disconnectTelegram() {
+  const email = getEmail();
+  try {
+    await fetch(`${API}/api/telegram/disconnect`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    document.getElementById('tgCode').style.display = 'none';
+    showAlert('Telegram disconnected', 'success');
+    checkTelegram(email);
+  } catch (e) {}
 }
 </script>
 </body>
