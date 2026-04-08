@@ -150,6 +150,13 @@ async function fetchGoPlus(address, chainId) {
   } catch (e) { return null; }
 }
 
+async function fetchRugcheck(address) {
+  try {
+    const data = await fetchJSON(`https://api.rugcheck.xyz/v1/tokens/${address}/report/summary`);
+    return data || null;
+  } catch (e) { return null; }
+}
+
 async function fetchHoneypot(address, chainId) {
   try {
     if (chainId === 'solana') return null;
@@ -341,19 +348,40 @@ app.post('/api/scan', async (req, res) => {
   const chainCfg = CHAIN_CONFIG[chain];
   if (!chainCfg) return res.status(400).json({ error: 'Unsupported chain' });
   try {
-    const [gp, hp, dx, eth] = await Promise.allSettled([
+    const [gp, hp, dx, eth, rc] = await Promise.allSettled([
       fetchGoPlus(address, chainCfg.goplusId),
       fetchHoneypot(address, chainCfg.goplusId),
       fetchDexScreener(address),
       fetchEtherscan(address, chainCfg.goplusId),
+      chain === 'SOL' ? fetchRugcheck(address) : Promise.resolve(null),
     ]);
     const goplusData   = gp.status  === 'fulfilled' ? gp.value  : null;
     const honeypotData = hp.status  === 'fulfilled' ? hp.value  : null;
     const dexData      = dx.status  === 'fulfilled' ? dx.value  : null;
     const ethData      = eth.status === 'fulfilled' ? eth.value : null;
+    const rugcheckData = rc.status  === 'fulfilled' ? rc.value  : null;
     const { score, risk, flags, safe } = calculateScore(goplusData, honeypotData, dexData, ethData, chain, address);
+
+    // Supplement with Rugcheck.xyz data for Solana tokens
+    if (chain === 'SOL' && rugcheckData) {
+      if (rugcheckData.risks && rugcheckData.risks.length > 0) {
+        for (const r of rugcheckData.risks) {
+          const sev = r.level === 'danger' ? 'critical' : r.level === 'warn' ? 'high' : 'medium';
+          flags.push({ label: `Rugcheck: ${r.name}`, desc: r.description || r.name, severity: sev });
+        }
+      }
+      if (rugcheckData.score !== undefined) {
+        safe.push({ label: 'Rugcheck Score', desc: `${rugcheckData.score}/100 (lower = safer)` });
+      }
+    }
+
+    const finalScore = chain === 'SOL' && rugcheckData?.score
+      ? Math.min(100, score + Math.floor(rugcheckData.score * 0.3))
+      : score;
+    const finalRisk = finalScore >= 40 ? 'HIGH' : finalScore >= 20 ? 'MEDIUM' : 'LOW';
+
     res.json({
-      address, chain, chainName: chainCfg.name, score, risk, flags, safe,
+      address, chain, chainName: chainCfg.name, score: finalScore, risk: finalRisk, flags, safe,
       tokenInfo: {
         name:    goplusData?.token_name   || dexData?.baseToken?.name   || 'Unknown',
         symbol:  goplusData?.token_symbol || dexData?.baseToken?.symbol || '???',
@@ -365,7 +393,7 @@ app.post('/api/scan', async (req, res) => {
         volume24h:      parseFloat(dexData.volume?.h24 || 0),
         priceChange24h: parseFloat(dexData.priceChange?.h24 || 0),
       } : null,
-      sources: { goplus: !!goplusData, honeypot: !!honeypotData, dexscreener: !!dexData, etherscan: !!ethData },
+      sources: { goplus: !!goplusData, honeypot: !!honeypotData, dexscreener: !!dexData, etherscan: !!ethData, rugcheck: !!rugcheckData },
       scannedAt: new Date().toISOString(),
     });
   } catch (err) { res.status(500).json({ error: 'Scan failed. Try again.' }); }
