@@ -175,16 +175,32 @@ async function fetchEtherscan(address, chainId) {
   } catch (e) { return null; }
 }
 
-function calculateScore(goplus, honeypot, dex, etherscan) {
+function calculateScore(goplus, honeypot, dex, etherscan, chain = 'ETH') {
   let score = 0;
   const flags = [], safe = [];
 
-  // If NO data at all, show warning but don't auto-flag as HIGH RISK
-  // (XRP, major coins, non-EVM tokens won't have GoPlus data)
-  const hasData = !!(goplus || honeypot);
-  if (!hasData) {
-    flags.push({ label: 'Limited Security Data', desc: 'Security APIs have limited data for this token — DYOR', severity: 'medium' });
-    score += 5; // small penalty, not a dealbreaker
+  // ── CHAIN AWARENESS ──
+  // Non-EVM chains (SOL, XRP etc) don't have full GoPlus/Honeypot support
+  // We only score what we can CONFIRM — never penalize missing data
+  const isEVM = !['SOL'].includes(chain);
+  const hasGoplusData = !!goplus;
+  const hasHoneypotData = !!honeypot;
+  const hasAnySecurityData = hasGoplusData || hasHoneypotData;
+
+  // For non-EVM chains with no security data, return neutral result
+  if (!isEVM && !hasAnySecurityData) {
+    return {
+      score: 0,
+      risk: 'LOW',
+      flags: [],
+      safe: [{ label: 'Chain Notice', desc: 'Full security scanning not available for this chain — check DEX data manually' }]
+    };
+  }
+
+  // For EVM tokens with no data at all — mild warning only
+  if (isEVM && !hasAnySecurityData) {
+    score += 5;
+    flags.push({ label: 'Limited Security Data', desc: 'Security APIs returned no data for this token', severity: 'medium' });
   }
 
   // ── HONEYPOT — only flag if CONFIRMED ──
@@ -192,87 +208,84 @@ function calculateScore(goplus, honeypot, dex, etherscan) {
   if (isHoneypot) {
     score += 50;
     flags.push({ label: 'Honeypot Detected', desc: 'Cannot sell — funds will be permanently trapped', severity: 'critical' });
-  } else if (hasData) {
+  } else if (hasAnySecurityData) {
     safe.push({ label: 'Honeypot Test Passed', desc: 'Token can be bought and sold freely' });
   }
 
-  // ── TAX — only flag if CONFIRMED bad ──
+  // ── TAX — only if confirmed ──
   const buyTax  = parseFloat(goplus?.buy_tax  || honeypot?.simulationResult?.buyTax  || 0);
   const sellTax = parseFloat(goplus?.sell_tax || honeypot?.simulationResult?.sellTax || 0);
-  if (sellTax > 20 || buyTax > 20)      { score += 25; flags.push({ label: 'Extreme Tax',  desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}% — nearly all funds taken`, severity: 'critical' }); }
+  if (sellTax > 20 || buyTax > 20)      { score += 25; flags.push({ label: 'Extreme Tax',  desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%`, severity: 'critical' }); }
   else if (sellTax > 10 || buyTax > 10) { score += 15; flags.push({ label: 'High Tax',     desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%`, severity: 'high' }); }
   else if (sellTax > 5  || buyTax > 5)  { score += 6;  flags.push({ label: 'Moderate Tax', desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%`, severity: 'medium' }); }
-  else if (goplus) safe.push({ label: 'Normal Tax Rate', desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%` });
+  else if (hasGoplusData) safe.push({ label: 'Normal Tax', desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%` });
 
-  // ── MINTABLE — only flag if CONFIRMED ──
+  // ── MINTABLE — only if confirmed ──
   const isMintable = goplus?.is_mintable === '1';
   if (isMintable) { score += 18; flags.push({ label: 'Mintable Supply', desc: 'Owner can create unlimited new tokens', severity: 'high' }); }
-  else if (goplus) safe.push({ label: 'Fixed Supply', desc: 'Cannot mint new tokens' });
+  else if (hasGoplusData) safe.push({ label: 'Fixed Supply', desc: 'Cannot mint new tokens' });
 
-  // ── OWNER — only flag if CONFIRMED active ──
+  // ── OWNER — only if confirmed active ──
   const ownerAddr = goplus?.owner_address;
   const renounced = !ownerAddr || ownerAddr === '0x0000000000000000000000000000000000000000';
-  const ownerActive = !renounced && !!ownerAddr;
-  if (ownerActive) { score += 18; flags.push({ label: 'Owner Active', desc: 'Contract not renounced — owner retains control', severity: 'high' }); }
-  else if (goplus) safe.push({ label: 'Contract Renounced', desc: 'Owner gave up control' });
+  const ownerActive = !renounced;
+  if (ownerActive && hasGoplusData) { score += 15; flags.push({ label: 'Owner Active', desc: 'Contract not renounced — owner retains control', severity: 'high' }); }
+  else if (hasGoplusData) safe.push({ label: 'Contract Renounced', desc: 'Owner gave up control' });
 
-  // ── LIQUIDITY LOCK — only flag if CONFIRMED unlocked ──
-  // Key fix: if GoPlus returns NO lp_locked field, don't assume unlocked
-  // Only flag as unlocked if GoPlus explicitly says lp_locked = '0' or we have LP data
+  // ── LIQUIDITY LOCK — only flag if EXPLICITLY unlocked ──
   const lpLocked = goplus?.lp_locked === '1';
   const lpExplicitlyUnlocked = goplus?.lp_locked === '0';
-  const lpUnlocked = lpExplicitlyUnlocked; // only flag if CONFIRMED unlocked
+  const lpUnlocked = lpExplicitlyUnlocked;
   if (lpLocked) {
-    safe.push({ label: 'Liquidity Locked', desc: 'LP cannot be removed — rug protection active' });
+    safe.push({ label: 'Liquidity Locked', desc: 'LP cannot be removed — rug protected' });
   } else if (lpExplicitlyUnlocked) {
-    score += 28;
+    score += 25;
     flags.push({ label: 'Liquidity Unlocked', desc: 'LP tokens not locked — dev can remove all liquidity', severity: 'critical' });
-  } else if (goplus) {
-    // GoPlus returned data but no LP lock info — mild warning
-    score += 8;
-    flags.push({ label: 'LP Lock Unconfirmed', desc: 'Cannot verify liquidity is locked — check manually', severity: 'medium' });
+  } else if (hasGoplusData) {
+    score += 6;
+    flags.push({ label: 'LP Lock Status Unknown', desc: 'Cannot verify if liquidity is locked — check manually', severity: 'medium' });
   }
 
-  // ── CONTRACT TRICKS — only flag if CONFIRMED ──
-  if (goplus?.is_proxy === '1')                { score += 14; flags.push({ label: 'Proxy Contract',     desc: 'Contract logic can be swapped without warning', severity: 'high' }); }
-  if (goplus?.hidden_owner === '1')            { score += 14; flags.push({ label: 'Hidden Owner',       desc: 'Concealed owner can reclaim full control', severity: 'critical' }); }
+  // ── CONTRACT TRICKS — only if confirmed ──
+  if (goplus?.is_proxy === '1')                { score += 14; flags.push({ label: 'Proxy Contract',     desc: 'Contract logic can be swapped silently', severity: 'high' }); }
+  if (goplus?.hidden_owner === '1')            { score += 14; flags.push({ label: 'Hidden Owner',       desc: 'Concealed owner can reclaim control', severity: 'critical' }); }
   if (goplus?.is_blacklisted === '1')          { score += 12; flags.push({ label: 'Blacklist Function', desc: 'Owner can block wallets from selling', severity: 'high' }); }
   if (goplus?.can_take_back_ownership === '1') { score += 12; flags.push({ label: 'Reclaim Ownership',  desc: 'Renouncement can be reversed', severity: 'high' }); }
   if (goplus?.transfer_pausable === '1')       { score += 10; flags.push({ label: 'Transfer Pausable',  desc: 'Owner can freeze all transfers', severity: 'high' }); }
-  if (goplus?.selfdestruct === '1')            { score += 20; flags.push({ label: 'Self-Destruct',      desc: 'Contract can be destroyed — all funds lost', severity: 'critical' }); }
+  if (goplus?.selfdestruct === '1')            { score += 20; flags.push({ label: 'Self-Destruct',      desc: 'Contract can be destroyed — funds lost', severity: 'critical' }); }
 
-  // ── HOLDER CONCENTRATION — only flag if data present ──
+  // ── HOLDER CONCENTRATION — only if data present ──
   const topHolder = parseFloat(goplus?.holders?.[0]?.percent || 0) * 100;
-  if (topHolder > 70)      { score += 20; flags.push({ label: 'Extreme Whale',        desc: `Top wallet holds ${topHolder.toFixed(1)}% — single dump risk`, severity: 'critical' }); }
-  else if (topHolder > 50) { score += 15; flags.push({ label: 'Whale Concentration',  desc: `Top wallet holds ${topHolder.toFixed(1)}%`, severity: 'critical' }); }
-  else if (topHolder > 30) { score += 8;  flags.push({ label: 'High Concentration',   desc: `Top wallet holds ${topHolder.toFixed(1)}%`, severity: 'high' }); }
-  else if (topHolder > 15) { score += 4;  flags.push({ label: 'Moderate Concentration', desc: `Top wallet holds ${topHolder.toFixed(1)}%`, severity: 'medium' }); }
-  else if (topHolder > 0)  safe.push({ label: 'Holder Distribution', desc: `Top wallet holds ${topHolder.toFixed(1)}%` });
+  if (topHolder > 70)      { score += 20; flags.push({ label: 'Extreme Whale',       desc: `Top wallet: ${topHolder.toFixed(1)}% — single dump risk`, severity: 'critical' }); }
+  else if (topHolder > 50) { score += 15; flags.push({ label: 'Whale Concentration', desc: `Top wallet: ${topHolder.toFixed(1)}%`, severity: 'critical' }); }
+  else if (topHolder > 30) { score += 8;  flags.push({ label: 'High Concentration',  desc: `Top wallet: ${topHolder.toFixed(1)}%`, severity: 'high' }); }
+  else if (topHolder > 15) { score += 4;  flags.push({ label: 'Moderate Concentration', desc: `Top wallet: ${topHolder.toFixed(1)}%`, severity: 'medium' }); }
+  else if (topHolder > 0)  safe.push({ label: 'Holder Distribution', desc: `Top wallet: ${topHolder.toFixed(1)}%` });
 
-  // ── HOLDER COUNT — only flag new/small tokens ──
+  // ── HOLDER COUNT — only flag small new tokens ──
   const holderCount = parseInt(goplus?.holder_count || 0);
-  if (holderCount > 0 && holderCount < 30)         { score += 15; flags.push({ label: 'Extremely Few Holders', desc: `Only ${holderCount} holders — very likely pump & dump`, severity: 'critical' }); }
-  else if (holderCount >= 30 && holderCount < 100)  { score += 10; flags.push({ label: 'Very Few Holders',     desc: `Only ${holderCount} holders — high pump risk`, severity: 'high' }); }
-  else if (holderCount >= 100 && holderCount < 300) { score += 5;  flags.push({ label: 'Low Holder Count',     desc: `${holderCount} holders`, severity: 'medium' }); }
+  if (holderCount > 0 && holderCount < 30)         { score += 15; flags.push({ label: 'Extremely Few Holders', desc: `Only ${holderCount} holders — pump & dump risk`, severity: 'critical' }); }
+  else if (holderCount >= 30 && holderCount < 100)  { score += 10; flags.push({ label: 'Very Few Holders',     desc: `Only ${holderCount} holders`, severity: 'high' }); }
+  else if (holderCount >= 100 && holderCount < 300) { score += 4;  flags.push({ label: 'Low Holder Count',     desc: `${holderCount} holders`, severity: 'medium' }); }
   else if (holderCount >= 300) safe.push({ label: 'Holder Count', desc: `${holderCount.toLocaleString()} holders` });
 
   // ── CONTRACT VERIFICATION ──
   if (etherscan?.SourceCode === '') { score += 10; flags.push({ label: 'Unverified Contract', desc: 'Source code hidden — cannot be audited', severity: 'high' }); }
-  else if (etherscan?.SourceCode)   safe.push({ label: 'Verified Contract', desc: 'Source code is publicly auditable' });
+  else if (etherscan?.SourceCode)   safe.push({ label: 'Verified Contract', desc: 'Source code publicly auditable' });
 
-  // ── LIQUIDITY AMOUNT — only flag if DEX data present ──
+  // ── LIQUIDITY AMOUNT ──
   const liqUSD = parseFloat(dex?.liquidity?.usd || 0);
-  if (dex && liqUSD === 0)               { score += 15; flags.push({ label: 'Zero Liquidity',             desc: 'No liquidity pool found — cannot trade safely', severity: 'critical' }); }
-  else if (liqUSD > 0 && liqUSD < 1000)  { score += 15; flags.push({ label: 'Dangerously Low Liquidity', desc: `Only $${liqUSD.toLocaleString()} — easily manipulated`, severity: 'critical' }); }
-  else if (liqUSD >= 1000 && liqUSD < 5000)  { score += 8; flags.push({ label: 'Very Low Liquidity',    desc: `Only $${liqUSD.toLocaleString()}`, severity: 'high' }); }
-  else if (liqUSD >= 5000 && liqUSD < 20000) { score += 3; flags.push({ label: 'Low Liquidity',         desc: `$${liqUSD.toLocaleString()} in liquidity`, severity: 'medium' }); }
-  else if (liqUSD >= 20000) safe.push({ label: 'Good Liquidity', desc: `$${liqUSD.toLocaleString()} in liquidity` });
+  if (dex && liqUSD === 0)               { score += 15; flags.push({ label: 'Zero Liquidity',             desc: 'No liquidity found — cannot trade safely', severity: 'critical' }); }
+  else if (liqUSD > 0 && liqUSD < 1000)  { score += 15; flags.push({ label: 'Dangerously Low Liquidity', desc: `Only $${liqUSD.toLocaleString()}`, severity: 'critical' }); }
+  else if (liqUSD >= 1000 && liqUSD < 5000)  { score += 8; flags.push({ label: 'Very Low Liquidity',    desc: `$${liqUSD.toLocaleString()}`, severity: 'high' }); }
+  else if (liqUSD >= 5000 && liqUSD < 20000) { score += 3; flags.push({ label: 'Low Liquidity',         desc: `$${liqUSD.toLocaleString()}`, severity: 'medium' }); }
+  else if (liqUSD >= 20000) safe.push({ label: 'Good Liquidity', desc: `$${liqUSD.toLocaleString()}` });
 
   // ── COMPOUNDING ──
-  const criticalFlags = flags.filter(f => f.severity === 'critical').length;
-  const highFlags = flags.filter(f => f.severity === 'high').length;
-  if (criticalFlags >= 3) score += 15;
-  else if (criticalFlags >= 2) score += 8;
+  const criticalCount = flags.filter(f => f.severity === 'critical').length;
+  const highCount = flags.filter(f => f.severity === 'high').length;
+  if (criticalCount >= 3) score += 15;
+  else if (criticalCount >= 2) score += 8;
   if (lpUnlocked && ownerActive && isMintable) score += 15;
   else if (lpUnlocked && ownerActive) score += 10;
 
@@ -298,7 +311,7 @@ app.post('/api/scan', async (req, res) => {
     const honeypotData = hp.status  === 'fulfilled' ? hp.value  : null;
     const dexData      = dx.status  === 'fulfilled' ? dx.value  : null;
     const ethData      = eth.status === 'fulfilled' ? eth.value : null;
-    const { score, risk, flags, safe } = calculateScore(goplusData, honeypotData, dexData, ethData);
+    const { score, risk, flags, safe } = calculateScore(goplusData, honeypotData, dexData, ethData, chain);
     res.json({
       address, chain, chainName: chainCfg.name, score, risk, flags, safe,
       tokenInfo: {
@@ -473,7 +486,7 @@ app.post('/api/v1/scan', async (req, res) => {
     const honeypotData = hp.status  === 'fulfilled' ? hp.value  : null;
     const dexData      = dx.status  === 'fulfilled' ? dx.value  : null;
     const ethData      = eth.status === 'fulfilled' ? eth.value : null;
-    const { score, risk, flags, safe } = calculateScore(goplusData, honeypotData, dexData, ethData);
+    const { score, risk, flags, safe } = calculateScore(goplusData, honeypotData, dexData, ethData, chain);
     res.json({
       address, chain, chainName: chainCfg.name, score, risk, flags, safe,
       tokenInfo: { name: goplusData?.token_name || dexData?.baseToken?.name || 'Unknown', symbol: goplusData?.token_symbol || dexData?.baseToken?.symbol || '???' },
