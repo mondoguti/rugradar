@@ -4,10 +4,12 @@
     { "src": "*.html", "use": "@vercel/static" }
   ],
   "routes": [
+    { "src": "/index.html", "dest": "/index.html" },
+    { "src": "/success.html", "dest": "/success.html" },
+    { "src": "/api.html", "dest": "/api.html" },
+    { "src": "/bulk.html", "dest": "/bulk.html" },
+    { "src": "/watchlist.html", "dest": "/watchlist.html" },
     { "src": "/", "dest": "/index.html" },
-    { "src": "/success", "dest": "/success.html" },
-    { "src": "/api-dashboard", "dest": "/api.html" },
-    { "src": "/bulk", "dest": "/bulk.html" },
-    { "src": "/watchlist", "dest": "/watchlist.html" }
+    { "src": "/success", "dest": "/success.html" }
   ]
 }
