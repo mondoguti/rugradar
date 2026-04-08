@@ -461,6 +461,36 @@ footer strong{color:var(--accent)}
 
 <script>
 const API = 'https://rugradar-production.up.railway.app';
+
+// ── WHITE-LABEL ───────────────────────────────────────────────────────────────
+async function loadWhiteLabel() {
+  const params = new URLSearchParams(window.location.search);
+  const slug = params.get('wl');
+  if (!slug) return;
+  try {
+    const r = await fetch(`${API}/api/wl/${slug}`);
+    if (!r.ok) return;
+    const wl = await r.json();
+    // Update brand name
+    document.querySelectorAll('.nav-logo, .hero-brand').forEach(el => {
+      el.innerHTML = wl.logoUrl
+        ? `<img src="${wl.logoUrl}" style="height:28px;object-fit:contain"> <span>${wl.brandName}</span>`
+        : `<span style="color:var(--accent)">${wl.brandName}</span>`;
+    });
+    document.title = `${wl.brandName} — Token Security Scanner`;
+    // Update accent color
+    if (wl.primaryColor) {
+      document.documentElement.style.setProperty('--accent', wl.primaryColor);
+      document.documentElement.style.setProperty('--accent2', wl.primaryColor);
+    }
+    // Add powered by footer
+    const footer = document.querySelector('footer p');
+    if (footer) footer.innerHTML += ` <span style="opacity:0.4">· Powered by RugRadar</span>`;
+  } catch (e) {}
+}
+loadWhiteLabel();
+
+
 let chain = 'ETH', currentPlan = 'free';
 let scansToday = parseInt(localStorage.getItem('scans_today') || '0');
 if (localStorage.getItem('scan_date') !== new Date().toDateString()) { scansToday = 0; localStorage.setItem('scan_date', new Date().toDateString()); }

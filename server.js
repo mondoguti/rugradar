@@ -481,6 +481,41 @@ app.post('/api/telegram/disconnect', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+
+// ── WHITE-LABEL ROUTES ────────────────────────────────────────────────────────
+
+app.get('/api/wl/:slug', async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('whitelabel').select('*').eq('slug', req.params.slug).eq('active', true).single();
+    if (error || !data) return res.status(404).json({ error: 'White-label config not found' });
+    res.json({
+      brandName: data.brand_name,
+      logoUrl: data.logo_url,
+      primaryColor: data.primary_color,
+      slug: data.slug,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/wl', async (req, res) => {
+  const { slug, brandName, logoUrl, primaryColor, ownerEmail } = req.body;
+  if (!slug || !brandName || !ownerEmail) return res.status(400).json({ error: 'slug, brandName and ownerEmail required' });
+  try {
+    const { data: user } = await supabase.from('users').select('plan').eq('email', ownerEmail).single();
+    if (!user || user.plan !== 'whale') return res.status(403).json({ error: 'Whale plan required for white-label' });
+    const { data, error } = await supabase.from('whitelabel').upsert({
+      slug: slug.toLowerCase().replace(/[^a-z0-9-]/g, ''),
+      brand_name: brandName,
+      logo_url: logoUrl || null,
+      primary_color: primaryColor || '#ff3b3b',
+      owner_email: ownerEmail,
+      active: true,
+    }, { onConflict: 'slug' }).select().single();
+    if (error) throw error;
+    res.json({ success: true, url: `https://rugradar-rho.vercel.app?wl=${data.slug}`, ...data });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.listen(PORT, () => {
   console.log(`🛡 RugRadar running on port ${PORT} — ${Object.keys(CHAIN_CONFIG).length} chains supported`);
   startTelegramPolling();
