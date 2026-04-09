@@ -89,7 +89,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:1.25rem 2rem;display
 .plan-free{background:rgba(255,255,255,0.06);color:var(--muted);border:1px solid var(--border2)}
 .plan-pro{background:rgba(74,158,255,0.12);color:#4a9eff;border:1px solid rgba(74,158,255,0.25)}
 .plan-whale{background:rgba(139,92,246,0.12);color:#a78bfa;border:1px solid rgba(139,92,246,0.25)}
-.chains{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}.chains::-webkit-scrollbar{display:none}
+.chains{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem}
 .cpill{font-size:12px;font-weight:500;padding:6px 16px;border-radius:100px;border:1px solid var(--border2);cursor:pointer;background:transparent;color:var(--muted);transition:all 0.15s;font-family:var(--font-body)}
 .cpill:hover{border-color:var(--muted);color:var(--text)}
 .cpill.active{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -147,14 +147,6 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:1.25rem 2rem;display
 .error-box{background:rgba(255,59,59,0.06);border:1px solid rgba(255,59,59,0.2);border-radius:12px;padding:1.5rem}
 .error-title{font-weight:600;color:#ff6b6b;margin-bottom:6px}
 .error-desc{font-size:13px;color:var(--muted)}
-
-/* ── SCORE METER ── */
-.score-meter{padding:1.25rem 1.5rem;border-top:1px solid var(--border)}
-.score-meter-bar{width:100%;height:8px;background:var(--surface2);border-radius:100px;overflow:hidden;margin-bottom:10px}
-.score-meter-fill{height:100%;border-radius:100px;transition:width 0.8s ease}
-.score-meter-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);font-family:var(--font-mono);letter-spacing:0.5px;margin-bottom:10px}
-.score-meter-summary{font-size:13px;line-height:1.6}
-.chain-warn{background:rgba(255,184,0,0.08);border:1px solid rgba(255,184,0,0.25);border-radius:10px;padding:12px 16px;margin-bottom:1rem;font-size:13px;color:#ffd060;display:flex;align-items:center;gap:8px}
 
 /* ── PRICING ── */
 .pricing-section{padding:6rem 2rem;max-width:1100px;margin:0 auto}
@@ -255,7 +247,7 @@ footer strong{color:var(--accent)}
   </div>
   <div class="hero-stats">
     <div class="hstat"><span class="hstat-num">$17B+</span><div class="hstat-label">Lost to scams in 2025</div></div>
-    <div class="hstat"><span class="hstat-num" id="scanCounter">0</span><div class="hstat-label">Tokens scanned</div></div>
+    <div class="hstat"><span class="hstat-num">60+</span><div class="hstat-label">Chains supported</div></div>
     <div class="hstat"><span class="hstat-num">4</span><div class="hstat-label">Live security APIs</div></div>
     <div class="hstat"><span class="hstat-num">3s</span><div class="hstat-label">Average scan time</div></div>
   </div>
@@ -439,24 +431,23 @@ footer strong{color:var(--accent)}
       </ul>
       <button class="price-btn btn-red" id="btnPro" onclick="startCheckout('pro')">Upgrade to Pro</button>
     </div>
-    <div class="price-card" style="border-color:rgba(139,92,246,0.3)">
+    <div class="price-card">
       <div class="price-tier" style="color:#a78bfa">Whale</div>
-      <div class="price-amount" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">$29.99</div>
+      <div class="price-amount">$29.99</div>
       <div class="price-period">per month</div>
       <hr class="price-divider">
       <ul class="price-features">
         <li>Everything in Pro</li>
-        <li>Developer API access</li>
-        <li>Bulk scan 50 tokens</li>
-        <li>Portfolio watchlist</li>
+        <li>API access</li>
+        <li>Bulk token scanning</li>
         <li>Telegram bot alerts</li>
         <li>Priority support</li>
-      </ul>
+        </ul>
       <button class="price-btn btn-purple" id="btnWhale" onclick="startCheckout('whale')">Upgrade to Whale</button>
     </div>
     <div class="price-card" style="border-color:rgba(251,191,36,0.3)">
       <div class="price-tier" style="color:#fbbf24">White-Label</div>
-      <div class="price-amount" style="background:linear-gradient(135deg,#fbbf24,#d97706);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">$149</div>
+      <div class="price-amount" style="font-size:2rem">$149</div>
       <div class="price-period">per month add-on</div>
       <hr class="price-divider">
       <ul class="price-features">
@@ -487,62 +478,13 @@ footer strong{color:var(--accent)}
 </section>
 
 <!-- FOOTER -->
-<footer style="border-top:1px solid var(--border);padding:3rem 2rem;background:var(--surface)">
-  <div style="max-width:1100px;margin:0 auto">
-    <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:3rem;margin-bottom:2.5rem">
-      <div>
-        <div style="display:flex;align-items:center;gap:8px;font-family:var(--font-display);font-size:1rem;font-weight:800;margin-bottom:0.75rem">
-          <svg width="20" height="20" viewBox="0 0 36 36" fill="none"><circle cx="18" cy="18" r="17" stroke="#ff3b3b" stroke-width="1.5" opacity="0.3"/><circle cx="18" cy="18" r="5" stroke="#ff3b3b" stroke-width="1.5"/><line x1="18" y1="18" x2="30" y2="10" stroke="#ff3b3b" stroke-width="2" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 18 18" to="360 18 18" dur="3s" repeatCount="indefinite"/></line></svg>
-          RUG<span style="color:var(--accent)">RADAR</span>
-        </div>
-        <p style="font-size:13px;color:var(--muted);line-height:1.7;max-width:300px">Real-time token security scanning powered by GoPlus, Honeypot.is, DEXScreener and Etherscan. Not financial advice.</p>
-      </div>
-      <div>
-        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:1rem;font-family:var(--font-mono)">Tools</div>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <a href="bulk.html" style="font-size:13px;color:var(--muted);text-decoration:none;transition:color 0.2s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">⚡ Bulk Scanner</a>
-          <a href="watchlist.html" style="font-size:13px;color:var(--muted);text-decoration:none" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">👁 Watchlist</a>
-          <a href="api.html" style="font-size:13px;color:var(--muted);text-decoration:none" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">🔑 API Access</a>
-          <a href="whitelabel.html" style="font-size:13px;color:var(--muted);text-decoration:none" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">🏷 White-Label</a>
-        </div>
-      </div>
-      <div>
-        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:1rem;font-family:var(--font-mono)">Plans</div>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <span style="font-size:13px;color:var(--muted)">Free — $0/mo</span>
-          <span style="font-size:13px;color:var(--muted)">Pro — $9.99/mo</span>
-          <span style="font-size:13px;color:var(--muted)">Whale — $29.99/mo</span>
-          <span style="font-size:13px;color:var(--muted)">White-Label — $149/mo</span>
-        </div>
-      </div>
-    </div>
-    <div style="border-top:1px solid var(--border);padding-top:1.5rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem">
-      <p style="font-size:12px;color:var(--muted)">© 2026 RugRadar. All rights reserved. Not financial advice.</p>
-      <div style="display:flex;gap:1rem">
-        <span style="font-size:12px;color:var(--muted)">Powered by GoPlus · Honeypot.is · DEXScreener · Etherscan</span>
-      </div>
-    </div>
-  </div>
+<footer>
+  <p>Built with real data. <strong>RugRadar</strong> uses GoPlus Security, Honeypot.is, DEXScreener and Etherscan APIs.<br>
+  Not financial advice. Always do your own research.</p>
 </footer>
 
 <script>
 const API = 'https://rugradar-production.up.railway.app';
-
-// Live scan counter animation
-async function animateCounter() {
-  const el = document.getElementById('scanCounter');
-  if (!el) return;
-  // Animate from 0 to a base number to make it feel live
-  const target = 12847 + Math.floor(Math.random() * 500);
-  let current = 0;
-  const step = Math.ceil(target / 60);
-  const timer = setInterval(() => {
-    current = Math.min(current + step, target);
-    el.textContent = current.toLocaleString();
-    if (current >= target) clearInterval(timer);
-  }, 20);
-}
-animateCounter();
 
 // ── WHITE-LABEL ───────────────────────────────────────────────────────────────
 async function loadWhiteLabel() {
@@ -610,17 +552,6 @@ async function checkPlan() {
 async function doScan() {
   const address = document.getElementById('addrInput').value.trim();
   if (!address || address.length < 10) return;
-  // Chain mismatch detection
-  const isEVMAddr = address.startsWith('0x');
-  const isSolChain = chain === 'SOL';
-  if (isSolChain && isEVMAddr) {
-    document.getElementById('result').innerHTML = `<div class="chain-warn">⚠️ This looks like an EVM address (starts with 0x) but you selected Solana. Try ETH, BSC, or BASE instead.</div>`;
-    return;
-  }
-  if (!isSolChain && !isEVMAddr && address.length > 32) {
-    document.getElementById('result').innerHTML = `<div class="chain-warn">⚠️ This looks like a Solana address but you selected ${chain}. Switch to SOL chain above.</div>`;
-    return;
-  }
   if (currentPlan === 'free' && scansToday >= 3) {
     document.getElementById('result').innerHTML = `<div class="error-box"><div class="error-title">Daily limit reached</div><div class="error-desc">You've used your 3 free scans today. Upgrade to Pro for unlimited scans.</div></div>`;
     document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
@@ -647,10 +578,7 @@ function showResult(d) {
   const sH = d.safe.map(f => `<div class="check"><div class="ci ci-safe">✓</div><div><div class="check-label">${f.label}</div><div class="check-desc">${f.desc}</div></div></div>`).join('');
   const mH = d.marketData ? `<div class="market-row"><div class="mst"><div class="mst-label">Price</div><div class="mst-val">$${fmt(d.marketData.priceUSD)}</div></div><div class="mst"><div class="mst-label">Liquidity</div><div class="mst-val">$${fmtK(d.marketData.liquidityUSD)}</div></div><div class="mst"><div class="mst-label">24h Change</div><div class="mst-val ${d.marketData.priceChange24h >= 0 ? 'up' : 'down'}">${d.marketData.priceChange24h >= 0 ? '+' : ''}${d.marketData.priceChange24h.toFixed(2)}%</div></div></div>` : '';
   const sum = d.risk === 'HIGH' ? `<strong>High risk.</strong> ${d.flags.length} critical flags detected. Proceed with extreme caution or avoid entirely.` : d.risk === 'MEDIUM' ? `<strong>Proceed with caution.</strong> ${d.flags.length} concern${d.flags.length !== 1 ? 's' : ''} found. Research further before investing.` : `<strong>Looks relatively safe.</strong> No major red flags detected. Always DYOR before investing.`;
-  const scoreColor = d.score >= 70 ? '#ff6b6b' : d.score >= 40 ? '#ffd060' : d.score >= 20 ? '#ffb800' : '#00d97e';
-  const scoreSummary = d.score >= 70 ? '☠️ Critical risk — do not invest' : d.score >= 40 ? '🚨 Multiple red flags — high caution advised' : d.score >= 20 ? '⚠️ Some concerns — research before investing' : '✅ Looks safe — no major red flags detected';
-  const meterHTML = `<div class="score-meter"><div class="score-meter-bar"><div class="score-meter-fill" style="width:${d.score}%;background:${scoreColor}"></div></div><div class="score-meter-labels"><span>0 · Safe</span><span>20 · Low</span><span>40 · Medium</span><span>70 · High</span><span>100</span></div><div class="score-meter-summary" style="color:${scoreColor}">${scoreSummary}</div></div>`;
-  document.getElementById('result').innerHTML = `<div class="result-card"><div class="result-header"><div><div class="risk-badge badge-${d.risk}">${riskLabel}</div><div class="token-name">${d.tokenInfo.name} <span style="color:var(--muted);font-size:0.85em">(${d.tokenInfo.symbol})</span></div><div class="token-addr">${d.address}</div>${d.tokenInfo.holders ? `<div style="font-size:12px;color:var(--muted);margin-top:6px;font-family:var(--font-mono)">${d.tokenInfo.holders.toLocaleString()} holders · ${d.chainName}</div>` : ''}</div><div class="score-box"><div class="score-num score-${d.risk}">${d.score}</div><div class="score-sub">Risk Score</div></div></div>${meterHTML}<hr class="divider"><div class="checks">${fH}${sH}</div>${mH}<div class="summary-bar">${sum}</div><div class="sources-row">${['goplus', 'honeypot', 'dexscreener', 'etherscan', 'rugcheck'].filter(s => d.sources[s] !== undefined).map(s => `<span class="src ${d.sources[s] ? 'src-on' : 'src-off'}">${s} ${d.sources[s] ? '✓' : '✗'}</span>`).join('')}</div></div>`;
+  document.getElementById('result').innerHTML = `<div class="result-card"><div class="result-header"><div><div class="risk-badge badge-${d.risk}">${riskLabel}</div><div class="token-name">${d.tokenInfo.name} <span style="color:var(--muted);font-size:0.85em">(${d.tokenInfo.symbol})</span></div><div class="token-addr">${d.address}</div>${d.tokenInfo.holders ? `<div style="font-size:12px;color:var(--muted);margin-top:6px;font-family:var(--font-mono)">${d.tokenInfo.holders.toLocaleString()} holders · ${d.chainName}</div>` : ''}</div><div class="score-box"><div class="score-num score-${d.risk}">${d.score}</div><div class="score-sub">Risk Score</div></div></div><hr class="divider"><div class="checks">${fH}${sH}</div>${mH}<div class="summary-bar">${sum}</div><div class="sources-row">${['goplus', 'honeypot', 'dexscreener', 'etherscan'].map(s => `<span class="src ${d.sources[s] ? 'src-on' : 'src-off'}">${s} ${d.sources[s] ? '✓' : '✗'}</span>`).join('')}</div></div>`;
 }
 
 async function startCheckout(plan) {
