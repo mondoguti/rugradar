@@ -345,10 +345,11 @@ footer strong{color:var(--accent)}
     </div>
 
     <div class="search-row">
-      <input id="addrInput" placeholder="Paste token contract address (0x... or Solana address)" onkeydown="if(event.key==='Enter')doScan()"/>
+      <input id="addrInput" placeholder="Paste token contract address (0x... or Solana address)" onkeydown="if(event.key==='Enter')doScan()" oninput="detectChain(this.value)"/>
       <button class="scan-btn" id="scanBtn" onclick="doScan()">SCAN →</button>
     </div>
 
+    <div id="chainTip" style="font-size:12px;color:var(--muted);margin-top:-1rem;margin-bottom:1.5rem;display:flex;align-items:center;gap:6px"><span>💡</span><span>Solana = long random string &nbsp;·&nbsp; ETH/BSC/Base = starts with <code style="font-family:var(--font-mono);color:var(--accent)">0x</code></span></div>
     <div id="result">
       <div class="placeholder">
         <div class="placeholder-icon">
@@ -401,7 +402,6 @@ footer strong{color:var(--accent)}
   <div class="section-label">Pricing</div>
   <h2 class="section-title">Simple, honest pricing</h2>
   <p class="section-sub">Start free. Upgrade when you need unlimited scans and advanced features.</p>
-
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.25rem;margin-top:3rem">
     <div class="price-card">
       <div class="price-tier">Free</div>
@@ -448,20 +448,18 @@ footer strong{color:var(--accent)}
       <button class="price-btn btn-purple" id="btnWhale" onclick="startCheckout('whale')">Upgrade to Whale</button>
     </div>
   </div>
-
   <div style="margin-top:2rem;background:var(--bg);border:1px solid rgba(251,191,36,0.3);border-radius:20px;padding:2.5rem;display:flex;align-items:center;justify-content:space-between;gap:2rem;flex-wrap:wrap">
     <div style="display:flex;align-items:flex-start;gap:1.5rem;flex:1">
       <div style="width:56px;height:56px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.2);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0">🏷</div>
       <div>
         <div style="font-family:var(--font-mono);font-size:10px;color:#fbbf24;letter-spacing:3px;text-transform:uppercase;margin-bottom:6px">White-Label Plan</div>
         <div style="font-family:var(--font-display);font-size:1.3rem;font-weight:800;margin-bottom:8px">Your own branded scanner — everything included</div>
-        <div style="font-size:13px;color:var(--muted);line-height:1.7;max-width:560px;margin-bottom:14px">Get unlimited scans, API access, bulk scanning, Telegram alerts — plus your own branded URL with your name, logo, and colors. One plan, everything unlocked.</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7;max-width:560px;margin-bottom:14px">Get unlimited scans, API access, bulk scanning, Telegram alerts — plus your own branded URL. One plan, everything unlocked.</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <span style="font-size:12px;color:var(--safe);display:flex;align-items:center;gap:5px;background:rgba(0,217,126,0.06);padding:4px 10px;border-radius:100px;border:1px solid rgba(0,217,126,0.15)">✓ All Pro features</span>
           <span style="font-size:12px;color:var(--safe);display:flex;align-items:center;gap:5px;background:rgba(0,217,126,0.06);padding:4px 10px;border-radius:100px;border:1px solid rgba(0,217,126,0.15)">✓ All Whale features</span>
           <span style="font-size:12px;color:#fbbf24;display:flex;align-items:center;gap:5px;background:rgba(251,191,36,0.06);padding:4px 10px;border-radius:100px;border:1px solid rgba(251,191,36,0.15)">✓ Your brand name + logo</span>
           <span style="font-size:12px;color:#fbbf24;display:flex;align-items:center;gap:5px;background:rgba(251,191,36,0.06);padding:4px 10px;border-radius:100px;border:1px solid rgba(251,191,36,0.15)">✓ Branded scanner URL</span>
-          <span style="font-size:12px;color:#fbbf24;display:flex;align-items:center;gap:5px;background:rgba(251,191,36,0.06);padding:4px 10px;border-radius:100px;border:1px solid rgba(251,191,36,0.15)">✓ Custom colors + logo</span>
           <span style="font-size:12px;color:#fbbf24;display:flex;align-items:center;gap:5px;background:rgba(251,191,36,0.06);padding:4px 10px;border-radius:100px;border:1px solid rgba(251,191,36,0.15)">✓ Self-serve instant setup</span>
         </div>
       </div>
@@ -473,8 +471,17 @@ footer strong{color:var(--accent)}
       <div style="font-size:11px;color:var(--muted);margin-top:8px">Cancel anytime</div>
     </div>
   </div>
-
-  <div id="manageLink" style="display:none;text-align:center;margin-top:1.5rem">
+  <div id="manageLink"<div id="manageLink" style="display:none;text-align:center;margin-top:1.5rem">
+    <div id="whaleDash" style="display:none;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:14px;padding:1.5rem;margin-bottom:1rem">
+      <div style="font-family:var(--font-mono);font-size:11px;color:#a78bfa;letter-spacing:2px;margin-bottom:1rem">🐋 WHALE DASHBOARD</div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <a href="watchlist.html" style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;padding:10px 18px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:600">👁 Watchlist</a>
+        <a href="bulk.html" style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;padding:10px 18px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:600">⚡ Bulk Scanner</a>
+        <a href="api.html" style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;padding:10px 18px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:600">🔑 API Keys</a>
+        <a href="whitelabel.html" style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;padding:10px 18px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:600">🏷 White-Label</a>
+        <a href="watchlist.html" style="background:rgba(0,136,204,0.12);border:1px solid rgba(0,136,204,0.25);color:#4a9eff;padding:10px 18px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:600">📱 Telegram Alerts</a>
+      </div>
+    </div>
     <div style="font-size:13px;color:var(--muted)">Already subscribed? <a onclick="openPortal()" style="color:var(--blue);cursor:pointer">Manage subscription →</a></div>
   </div>
 </div>
@@ -583,6 +590,17 @@ async function checkPlan() {
   } catch (e) {}
 }
 
+function detectChain(address) {
+  if (!address || address.length < 5) return;
+  const tip = document.getElementById('chainTip');
+  if (!tip) return;
+  const isEVM = address.startsWith('0x');
+  const isSol = !isEVM && address.length >= 32;
+  if (isSol && chain !== 'SOL') tip.innerHTML = '<span>⚠️</span><span style="color:#ffd060">Looks like a <strong style="color:var(--text)">Solana</strong> address — select <strong style="color:var(--text)">Solana</strong> above</span>';
+  else if (isEVM && chain === 'SOL') tip.innerHTML = '<span>⚠️</span><span style="color:#ffd060">Looks like an <strong style="color:var(--text)">EVM address</strong> (0x) — select ETH, BSC, or Base above</span>';
+  else tip.innerHTML = '<span>💡</span><span>Solana = long random string &nbsp;·&nbsp; ETH/BSC/Base = starts with <code style="font-family:var(--font-mono);color:var(--accent)">0x</code></span>';
+}
+
 async function doScan() {
   const address = document.getElementById('addrInput').value.trim();
   if (!address || address.length < 10) return;
@@ -607,14 +625,14 @@ async function doScan() {
 }
 
 function showResult(d) {
+  const scoreColor = d.score >= 70 ? '#ff6b6b' : d.score >= 40 ? '#ffd060' : d.score >= 20 ? '#ffb800' : '#00d97e';
+  const scoreSummary = d.score >= 70 ? '☠️ Critical risk — do not invest' : d.score >= 40 ? '🚨 Multiple red flags — high caution advised' : d.score >= 20 ? '⚠️ Some concerns — research before investing' : '✅ Looks safe — no major red flags detected';
+  const meterHTML = `<div style="padding:1rem 1.5rem;border-top:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:11px;color:var(--muted);font-family:var(--font-mono);letter-spacing:1px;text-transform:uppercase">Risk Meter</span><span style="font-size:13px;font-weight:700;color:${scoreColor}">${scoreSummary}</span></div><div style="width:100%;height:8px;background:#1a1a24;border-radius:100px;overflow:hidden;margin-bottom:8px"><div style="height:100%;width:${d.score}%;background:${scoreColor};border-radius:100px;transition:width 0.8s ease"></div></div><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);font-family:var(--font-mono)"><span>0 · Safe</span><span>20 · Low</span><span>40 · Medium</span><span>70 · High</span><span>100</span></div></div>`;
   const riskLabel = d.risk === 'HIGH' ? '⚠ HIGH RISK' : d.risk === 'MEDIUM' ? '~ MEDIUM RISK' : '✓ LOW RISK';
   const fH = d.flags.map(f => `<div class="check"><div class="ci ${f.severity === 'critical' || f.severity === 'high' ? 'ci-fail' : 'ci-warn'}">✕</div><div><div class="check-label">${f.label}</div><div class="check-desc">${f.desc}</div></div></div>`).join('');
   const sH = d.safe.map(f => `<div class="check"><div class="ci ci-safe">✓</div><div><div class="check-label">${f.label}</div><div class="check-desc">${f.desc}</div></div></div>`).join('');
   const mH = d.marketData ? `<div class="market-row"><div class="mst"><div class="mst-label">Price</div><div class="mst-val">$${fmt(d.marketData.priceUSD)}</div></div><div class="mst"><div class="mst-label">Liquidity</div><div class="mst-val">$${fmtK(d.marketData.liquidityUSD)}</div></div><div class="mst"><div class="mst-label">24h Change</div><div class="mst-val ${d.marketData.priceChange24h >= 0 ? 'up' : 'down'}">${d.marketData.priceChange24h >= 0 ? '+' : ''}${d.marketData.priceChange24h.toFixed(2)}%</div></div></div>` : '';
   const sum = d.risk === 'HIGH' ? `<strong>High risk.</strong> ${d.flags.length} critical flags detected. Proceed with extreme caution or avoid entirely.` : d.risk === 'MEDIUM' ? `<strong>Proceed with caution.</strong> ${d.flags.length} concern${d.flags.length !== 1 ? 's' : ''} found. Research further before investing.` : `<strong>Looks relatively safe.</strong> No major red flags detected. Always DYOR before investing.`;
-  const scoreColor = d.score >= 70 ? '#ff6b6b' : d.score >= 40 ? '#ffd060' : d.score >= 20 ? '#ffb800' : '#00d97e';
-  const scoreSummary = d.score >= 70 ? '☠️ Critical risk — do not invest' : d.score >= 40 ? '🚨 Multiple red flags — high caution advised' : d.score >= 20 ? '⚠️ Some concerns — research before investing' : '✅ Looks safe — no major red flags detected';
-  const meterHTML = `<div style="padding:1rem 1.5rem;border-top:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:11px;color:var(--muted);font-family:var(--font-mono);letter-spacing:1px;text-transform:uppercase">Risk Meter</span><span style="font-size:13px;font-weight:700;color:${scoreColor}">${scoreSummary}</span></div><div style="width:100%;height:8px;background:#1a1a24;border-radius:100px;overflow:hidden;margin-bottom:8px"><div style="height:100%;width:${d.score}%;background:${scoreColor};border-radius:100px;transition:width 0.8s ease"></div></div><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);font-family:var(--font-mono)"><span>0 · Safe</span><span>20 · Low</span><span>40 · Medium</span><span>70 · High</span><span>100</span></div></div>`;
   document.getElementById('result').innerHTML = `<div class="result-card"><div class="result-header"><div><div class="risk-badge badge-${d.risk}">${riskLabel}</div><div class="token-name">${d.tokenInfo.name} <span style="color:var(--muted);font-size:0.85em">(${d.tokenInfo.symbol})</span></div><div class="token-addr">${d.address}</div>${d.tokenInfo.holders ? `<div style="font-size:12px;color:var(--muted);margin-top:6px;font-family:var(--font-mono)">${d.tokenInfo.holders.toLocaleString()} holders · ${d.chainName}</div>` : ''}</div><div class="score-box"><div class="score-num score-${d.risk}">${d.score}</div><div class="score-sub">Risk Score</div></div></div>${meterHTML}<hr class="divider"><div class="checks">${fH}${sH}</div>${mH}<div class="summary-bar">${sum}</div><div class="sources-row">${['goplus', 'honeypot', 'dexscreener', 'etherscan', 'rugcheck'].filter(s => d.sources[s] !== undefined).map(s => `<span class="src ${d.sources[s] ? 'src-on' : 'src-off'}">${s} ${d.sources[s] ? '✓' : '✗'}</span>`).join('')}</div>${d.deployerInfo ? `<div style="padding:10px 18px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);font-family:var(--font-mono)">🔍 Deployer wallet: <span style="color:${d.deployerInfo.ageInDays < 7 ? '#ff6b6b' : d.deployerInfo.ageInDays < 30 ? '#ffd060' : 'var(--safe)'}">${d.deployerInfo.ageInDays} days old</span></div>` : ''}<div style="padding:12px 18px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.6;background:rgba(255,255,255,0.01)">⚠️ Detects contract-level risks only. Also verify LP lock on <a href="https://www.dextools.io" target="_blank" style="color:var(--blue);text-decoration:none">DEXTools</a> and deployer history on <a href="https://etherscan.io" target="_blank" style="color:var(--blue);text-decoration:none">Etherscan</a>. Not financial advice.</div></div>`;
 }
 
