@@ -22,7 +22,6 @@ const PRICES = {
 const RESEND_API_KEY = process.env.RESEND_API_KEY || null;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || null;
 
-// Store pending verifications: code -> email
 const pendingVerifications = {};
 
 async function sendTelegramMessage(chatId, text) {
@@ -47,7 +46,6 @@ async function sendTelegramAlert(email, tokenName, tokenSymbol, riskScore, addre
   } catch (e) { console.error('Telegram alert error:', e.message); }
 }
 
-// Poll for Telegram bot messages
 async function startTelegramPolling() {
   if (!TELEGRAM_BOT_TOKEN) return;
   let offset = 0;
@@ -89,8 +87,6 @@ async function startTelegramPolling() {
   poll();
 }
 
-
-
 async function sendAlertEmail(email, tokenName, tokenSymbol, riskLevel, riskScore, address, chain) {
   if (!RESEND_API_KEY) return;
   try {
@@ -108,7 +104,6 @@ async function sendAlertEmail(email, tokenName, tokenSymbol, riskLevel, riskScor
   } catch (e) { console.error('Email error:', e.message); }
 }
 
-// ── CHAIN CONFIG ──────────────────────────────────────────────────────────────
 const CHAIN_CONFIG = {
   ETH:    { goplusId: '1',       etherscanBase: 'https://api.etherscan.io/v2/api',         name: 'Ethereum' },
   BSC:    { goplusId: '56',      etherscanBase: 'https://api.bscscan.com/api',             name: 'BNB Chain' },
@@ -127,12 +122,10 @@ const CHAIN_CONFIG = {
   MANTA:  { goplusId: '169',     etherscanBase: null,                                      name: 'Manta' },
 };
 
-// ── MIDDLEWARE ────────────────────────────────────────────────────────────────
 app.use('/api/webhook', express.raw({ type: 'application/json' }));
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// ── API HELPERS ───────────────────────────────────────────────────────────────
 async function fetchJSON(url) {
   const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -182,32 +175,49 @@ async function fetchEtherscan(address, chainId) {
   } catch (e) { return null; }
 }
 
-// ── TRUST WHITELIST — known safe tokens skip scoring ──
+// ── NEW: Check deployer wallet age via Etherscan ──────────────────────────────
+async function checkDeployerRisk(contractAddress, chainId) {
+  try {
+    const key = Object.keys(CHAIN_CONFIG).find(k => CHAIN_CONFIG[k].goplusId === chainId);
+    const base = CHAIN_CONFIG[key]?.etherscanBase;
+    if (!base) return null;
+    // Get contract creation tx to find deployer
+    const creation = await fetchJSON(`${base}?module=contract&action=getcontractcreation&contractaddresses=${contractAddress}&apikey=${ETHERSCAN_KEY}`);
+    const deployer = creation?.result?.[0]?.contractCreator;
+    if (!deployer) return null;
+    // Get deployer's first ever transaction
+    const txList = await fetchJSON(`${base}?module=account&action=txlist&address=${deployer}&startblock=0&endblock=99999999&page=1&offset=1&sort=asc&apikey=${ETHERSCAN_KEY}`);
+    const firstTx = txList?.result?.[0];
+    if (!firstTx) return null;
+    const firstTxDate = new Date(parseInt(firstTx.timeStamp) * 1000);
+    const ageInDays = (Date.now() - firstTxDate.getTime()) / (1000 * 60 * 60 * 24);
+    return { deployer, ageInDays, firstTxDate: firstTxDate.toISOString() };
+  } catch (e) { return null; }
+}
+
 const TRUSTED_TOKENS = new Set([
-  // Ethereum
-  '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
-  '0xdac17f958d2ee523a2206206994597c13d831ec7', // USDT
-  '0x6b175474e89094c44da98b954eedeac495271d0f', // DAI
-  '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', // WETH
-  '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599', // WBTC
-  '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984', // UNI
-  '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9', // AAVE
-  '0x514910771af9ca656af840dff83e8264ecf986ca', // LINK
-  '0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce', // SHIB
-  '0x6982508145454ce325ddbe47a25d4ec3d2311933', // PEPE
-  // BSC
-  '0x55d398326f99059ff775485246999027b3197955', // BSC-USDT
-  '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d', // BSC-USDC
-  '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c', // WBNB
-  '0xe9e7cea3dedca5984780bafc599bd69add087d56', // BUSD
+  '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+  '0xdac17f958d2ee523a2206206994597c13d831ec7',
+  '0x6b175474e89094c44da98b954eedeac495271d0f',
+  '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',
+  '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599',
+  '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984',
+  '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9',
+  '0x514910771af9ca656af840dff83e8264ecf986ca',
+  '0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce',
+  '0x6982508145454ce325ddbe47a25d4ec3d2311933',
+  '0x55d398326f99059ff775485246999027b3197955',
+  '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d',
+  '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c',
+  '0xe9e7cea3dedca5984780bafc599bd69add087d56',
 ]);
 
-function calculateScore(goplus, honeypot, dex, etherscan, chain = 'ETH', address = '') {
+function calculateScore(goplus, honeypot, dex, etherscan, chain = 'ETH', address = '', deployerRisk = null) {
   let score = 0;
   const flags = [], safe = [];
 
-  // ── TRUST BYPASS — known tokens skip all scoring ──
-  const addr = (address || goplus?.token_address || '').toLowerCase();
+  // ── TRUST BYPASS ──
+  const addr = (address || '').toLowerCase();
   if (TRUSTED_TOKENS.has(addr) || goplus?.trust_list === '1') {
     return {
       score: 0, risk: 'LOW', flags: [],
@@ -215,28 +225,101 @@ function calculateScore(goplus, honeypot, dex, etherscan, chain = 'ETH', address
     };
   }
 
-  // ── CHAIN AWARENESS ──
   const isEVM = !['SOL'].includes(chain);
   const hasGoplusData = !!goplus;
-  const hasHoneypotData = !!honeypot;
-  const hasAnySecurityData = hasGoplusData || hasHoneypotData;
+  const hasAnySecurityData = !!goplus || !!honeypot;
 
-  // Non-EVM with no data — just show DEX signals
-  if (!isEVM && !hasAnySecurityData) {
-    // Still score from DEX data (liquidity, concentration)
-    const liqUSD = parseFloat(dex?.liquidity?.usd || 0);
-    if (dex && liqUSD < 1000 && liqUSD > 0) { score += 20; flags.push({ label: 'Very Low Liquidity', desc: `$${liqUSD.toLocaleString()} — high manipulation risk`, severity: 'high' }); }
-    else if (liqUSD >= 1000) safe.push({ label: 'Liquidity', desc: `$${liqUSD.toLocaleString()}` });
-    safe.push({ label: 'Chain Notice', desc: 'Contract-level security data not available for this chain' });
+  // ── FIX 1: DEAD TOKEN — zero liquidity = instant HIGH RISK ──
+  const liqUSD = parseFloat(dex?.liquidity?.usd || 0);
+  const hasDexData = !!dex;
+  if (hasDexData && liqUSD === 0) {
+    score += 60;
+    flags.push({ label: 'Dead Token — No Liquidity', desc: 'Zero liquidity found — token is dead or already rugged', severity: 'critical' });
+  }
+
+  // ── FIX 2: TOKEN AGE — under 7 days is high risk ──
+  const pairCreatedAt = dex?.pairCreatedAt;
+  if (pairCreatedAt) {
+    const ageInDays = (Date.now() - pairCreatedAt) / (1000 * 60 * 60 * 24);
+    if (ageInDays < 1) {
+      score += 25;
+      flags.push({ label: 'Brand New Token', desc: `Token is only ${Math.round(ageInDays * 24)} hours old — extremely unproven`, severity: 'critical' });
+    } else if (ageInDays < 7) {
+      score += 20;
+      flags.push({ label: 'Very New Token', desc: `Token is ${Math.round(ageInDays)} days old — unproven and high risk`, severity: 'high' });
+    } else if (ageInDays < 30) {
+      score += 5;
+      flags.push({ label: 'New Token', desc: `Token is ${Math.round(ageInDays)} days old`, severity: 'medium' });
+    }
+  }
+
+  // ── FIX 3: ALREADY RUGGED — price crashed + liquidity gone ──
+  const priceChange24h = parseFloat(dex?.priceChange?.h24 || 0);
+  if (priceChange24h <= -80 && liqUSD < 1000 && liqUSD > 0) {
+    score += 40;
+    flags.push({ label: 'Possible Rug Pull', desc: `Price down ${Math.abs(priceChange24h).toFixed(0)}% and liquidity almost gone — likely already rugged`, severity: 'critical' });
+  } else if (priceChange24h <= -60 && liqUSD < 5000) {
+    score += 20;
+    flags.push({ label: 'Price Crashed', desc: `Down ${Math.abs(priceChange24h).toFixed(0)}% with very low liquidity`, severity: 'high' });
+  }
+
+  // ── FIX 4: DEPLOYER WALLET AGE ──
+  if (deployerRisk) {
+    if (deployerRisk.ageInDays < 1) {
+      score += 35;
+      flags.push({ label: 'Brand New Deployer Wallet', desc: `Deployer wallet created less than 24 hours ago — major red flag`, severity: 'critical' });
+    } else if (deployerRisk.ageInDays < 7) {
+      score += 25;
+      flags.push({ label: 'Fresh Deployer Wallet', desc: `Deployer wallet only ${Math.round(deployerRisk.ageInDays)} days old — high risk signal`, severity: 'critical' });
+    } else if (deployerRisk.ageInDays < 30) {
+      score += 10;
+      flags.push({ label: 'New Deployer Wallet', desc: `Deployer wallet is ${Math.round(deployerRisk.ageInDays)} days old`, severity: 'high' });
+    }
+  }
+
+  // ── SOLANA SCORING ──
+  if (!isEVM) {
+    if (!hasGoplusData) {
+      safe.push({ label: 'Limited Data', desc: 'Security data not available for this token' });
+    } else {
+      if (goplus.mint_authority && goplus.mint_authority !== 'null' && goplus.mint_authority !== '') {
+        score += 30;
+        flags.push({ label: 'Mint Authority Active', desc: 'Creator can mint unlimited new tokens at any time', severity: 'critical' });
+      } else if (hasGoplusData) {
+        safe.push({ label: 'Mint Authority Revoked', desc: 'Cannot create new tokens' });
+      }
+      if (goplus.freeze_authority && goplus.freeze_authority !== 'null' && goplus.freeze_authority !== '') {
+        score += 35;
+        flags.push({ label: 'Freeze Authority Active', desc: 'Creator can freeze your wallet — Solana honeypot risk', severity: 'critical' });
+      } else if (hasGoplusData) {
+        safe.push({ label: 'Freeze Authority Revoked', desc: 'Cannot freeze wallets' });
+      }
+      if (goplus.metadata_mutable === '1' || goplus.metadata_mutable === true) {
+        score += 10;
+        flags.push({ label: 'Mutable Metadata', desc: 'Token name and logo can be changed', severity: 'medium' });
+      }
+      const solTopHolder = parseFloat(goplus?.holders?.[0]?.percent || 0) * 100;
+      if (solTopHolder > 50)      { score += 20; flags.push({ label: 'Whale Concentration', desc: `Top wallet: ${solTopHolder.toFixed(1)}%`, severity: 'critical' }); }
+      else if (solTopHolder > 20) { score += 10; flags.push({ label: 'High Concentration',  desc: `Top wallet: ${solTopHolder.toFixed(1)}%`, severity: 'high' }); }
+      else if (solTopHolder > 0)  safe.push({ label: 'Holder Distribution', desc: `Top wallet: ${solTopHolder.toFixed(1)}%` });
+      if (goplus.is_honeypot === '1') {
+        score += 50;
+        flags.push({ label: 'Honeypot Detected', desc: 'Cannot sell — funds trapped', severity: 'critical' });
+      }
+    }
+    // Liquidity for Solana (only if not already flagged as dead)
+    if (hasDexData && liqUSD > 0 && liqUSD < 1000)       { score += 15; flags.push({ label: 'Very Low Liquidity', desc: `$${liqUSD.toLocaleString()}`, severity: 'high' }); }
+    else if (liqUSD >= 1000 && liqUSD < 10000) { score += 5; flags.push({ label: 'Low Liquidity', desc: `$${liqUSD.toLocaleString()}`, severity: 'medium' }); }
+    else if (liqUSD >= 10000) safe.push({ label: 'Liquidity', desc: `$${liqUSD.toLocaleString()}` });
     return { score: Math.min(score, 100), risk: score >= 40 ? 'HIGH' : score >= 20 ? 'MEDIUM' : 'LOW', flags, safe };
   }
 
+  // ── EVM SCORING ──
   if (isEVM && !hasAnySecurityData) {
     score += 5;
     flags.push({ label: 'No Security Data', desc: 'Security APIs returned no data — token may be too new', severity: 'medium' });
   }
 
-  // ── HONEYPOT ──
   const isHoneypot = goplus?.is_honeypot === '1' || honeypot?.honeypotResult?.isHoneypot === true;
   if (isHoneypot) {
     score += 50;
@@ -245,13 +328,11 @@ function calculateScore(goplus, honeypot, dex, etherscan, chain = 'ETH', address
     safe.push({ label: 'Honeypot Test Passed', desc: 'Token can be bought and sold freely' });
   }
 
-  // ── CREATOR HISTORY — strongest behavioral signal ──
   if (goplus?.honeypot_with_same_creator === '1') {
     score += 50;
     flags.push({ label: 'Scam Creator', desc: 'This deployer has previously launched honeypot tokens', severity: 'critical' });
   }
 
-  // ── TAX ──
   const buyTax  = parseFloat(goplus?.buy_tax  || honeypot?.simulationResult?.buyTax  || 0);
   const sellTax = parseFloat(goplus?.sell_tax || honeypot?.simulationResult?.sellTax || 0);
   if (sellTax > 20 || buyTax > 20)      { score += 25; flags.push({ label: 'Extreme Tax',  desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%`, severity: 'critical' }); }
@@ -259,25 +340,21 @@ function calculateScore(goplus, honeypot, dex, etherscan, chain = 'ETH', address
   else if (sellTax > 5  || buyTax > 5)  { score += 6;  flags.push({ label: 'Moderate Tax', desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%`, severity: 'medium' }); }
   else if (hasGoplusData) safe.push({ label: 'Normal Tax', desc: `Buy: ${buyTax.toFixed(1)}% / Sell: ${sellTax.toFixed(1)}%` });
 
-  // ── MINTABLE ──
   const isMintable = goplus?.is_mintable === '1';
   if (isMintable) { score += 18; flags.push({ label: 'Mintable Supply', desc: 'Owner can create unlimited new tokens', severity: 'high' }); }
   else if (hasGoplusData) safe.push({ label: 'Fixed Supply', desc: 'Cannot mint new tokens' });
 
-  // ── OWNER ──
   const ownerAddr = goplus?.owner_address;
   const renounced = !ownerAddr || ownerAddr === '0x0000000000000000000000000000000000000000';
   const ownerActive = !renounced;
   if (ownerActive && hasGoplusData) { score += 15; flags.push({ label: 'Owner Active', desc: 'Contract not renounced — owner retains control', severity: 'high' }); }
   else if (hasGoplusData) safe.push({ label: 'Contract Renounced', desc: 'Owner gave up control' });
 
-  // ── LIQUIDITY LOCK — check lp_holders array for accurate lock % ──
   const lpHolders = goplus?.lp_holders || [];
   const totalLpLocked = lpHolders.reduce((sum, h) => sum + (h.is_locked ? parseFloat(h.percent || 0) : 0), 0) * 100;
   const totalLpBurned = lpHolders.reduce((sum, h) => sum + (h.is_contract && h.tag === 'Burn' ? parseFloat(h.percent || 0) : 0), 0) * 100;
   const effectiveLpSecured = totalLpLocked + totalLpBurned;
   const lpUnlocked = hasGoplusData && effectiveLpSecured < 50;
-
   if (effectiveLpSecured >= 80) {
     safe.push({ label: 'Liquidity Secured', desc: `${effectiveLpSecured.toFixed(0)}% of LP is locked or burned` });
   } else if (effectiveLpSecured >= 50) {
@@ -288,20 +365,17 @@ function calculateScore(goplus, honeypot, dex, etherscan, chain = 'ETH', address
     score += 6; flags.push({ label: 'LP Lock Unverified', desc: 'Cannot confirm liquidity is locked', severity: 'medium' });
   }
 
-  // ── CONTRACT TRICKS ──
-  if (goplus?.is_proxy === '1')                { score += 14; flags.push({ label: 'Proxy Contract',     desc: 'Contract logic can be swapped silently', severity: 'high' }); }
-  if (goplus?.hidden_owner === '1')            { score += 14; flags.push({ label: 'Hidden Owner',       desc: 'Concealed owner can reclaim control', severity: 'critical' }); }
-  if (goplus?.is_blacklisted === '1')          { score += 12; flags.push({ label: 'Blacklist Function', desc: 'Owner can block wallets from selling', severity: 'high' }); }
-  if (goplus?.can_take_back_ownership === '1') { score += 12; flags.push({ label: 'Reclaim Ownership',  desc: 'Renouncement can be reversed', severity: 'high' }); }
-  if (goplus?.transfer_pausable === '1')       { score += 10; flags.push({ label: 'Transfer Pausable',  desc: 'Owner can freeze all transfers', severity: 'high' }); }
-  if (goplus?.selfdestruct === '1')            { score += 20; flags.push({ label: 'Self-Destruct',      desc: 'Contract can be destroyed — funds lost', severity: 'critical' }); }
+  if (goplus?.is_proxy === '1')                { score += 14; flags.push({ label: 'Proxy Contract',       desc: 'Contract logic can be swapped silently', severity: 'high' }); }
+  if (goplus?.hidden_owner === '1')            { score += 14; flags.push({ label: 'Hidden Owner',         desc: 'Concealed owner can reclaim control', severity: 'critical' }); }
+  if (goplus?.is_blacklisted === '1')          { score += 12; flags.push({ label: 'Blacklist Function',   desc: 'Owner can block wallets from selling', severity: 'high' }); }
+  if (goplus?.can_take_back_ownership === '1') { score += 12; flags.push({ label: 'Reclaim Ownership',    desc: 'Renouncement can be reversed', severity: 'high' }); }
+  if (goplus?.transfer_pausable === '1')       { score += 10; flags.push({ label: 'Transfer Pausable',    desc: 'Owner can freeze all transfers', severity: 'high' }); }
+  if (goplus?.selfdestruct === '1')            { score += 20; flags.push({ label: 'Self-Destruct',        desc: 'Contract can be destroyed — funds lost', severity: 'critical' }); }
   if (goplus?.owner_change_balance === '1')    { score += 20; flags.push({ label: 'Balance Manipulation', desc: 'Owner can change wallet balances', severity: 'critical' }); }
-  if (goplus?.fake_token === '1')              { score += 50; flags.push({ label: 'Fake Token', desc: 'This token impersonates a legitimate project', severity: 'critical' }); }
-  if (goplus?.is_airdrop_scam === '1')         { score += 50; flags.push({ label: 'Airdrop Scam', desc: 'This token is a known airdrop scam', severity: 'critical' }); }
+  if (goplus?.fake_token === '1')              { score += 50; flags.push({ label: 'Fake Token',           desc: 'This token impersonates a legitimate project', severity: 'critical' }); }
+  if (goplus?.is_airdrop_scam === '1')         { score += 50; flags.push({ label: 'Airdrop Scam',         desc: 'This token is a known airdrop scam', severity: 'critical' }); }
 
-  // ── HOLDER CONCENTRATION ──
   const topHolder = parseFloat(goplus?.holders?.[0]?.percent || 0) * 100;
-  // Check if top holder is the creator (strong pump signal)
   const topIsCreator = goplus?.holders?.[0]?.is_contract === '0' && !goplus?.holders?.[0]?.tag;
   if (topHolder > 70)      { score += 20 + (topIsCreator ? 10 : 0); flags.push({ label: 'Extreme Whale', desc: `Top wallet: ${topHolder.toFixed(1)}%${topIsCreator ? ' (likely creator)' : ''}`, severity: 'critical' }); }
   else if (topHolder > 50) { score += 15; flags.push({ label: 'Whale Concentration', desc: `Top wallet: ${topHolder.toFixed(1)}%`, severity: 'critical' }); }
@@ -309,28 +383,24 @@ function calculateScore(goplus, honeypot, dex, etherscan, chain = 'ETH', address
   else if (topHolder > 15) { score += 4;  flags.push({ label: 'Moderate Concentration', desc: `Top wallet: ${topHolder.toFixed(1)}%`, severity: 'medium' }); }
   else if (topHolder > 0)  safe.push({ label: 'Holder Distribution', desc: `Top wallet: ${topHolder.toFixed(1)}%` });
 
-  // ── HOLDER COUNT — only flag small new tokens ──
   const holderCount = parseInt(goplus?.holder_count || 0);
   if (holderCount > 0 && holderCount < 30)         { score += 15; flags.push({ label: 'Extremely Few Holders', desc: `Only ${holderCount} holders — pump & dump risk`, severity: 'critical' }); }
   else if (holderCount >= 30 && holderCount < 100)  { score += 10; flags.push({ label: 'Very Few Holders',     desc: `Only ${holderCount} holders`, severity: 'high' }); }
   else if (holderCount >= 100 && holderCount < 300) { score += 4;  flags.push({ label: 'Low Holder Count',     desc: `${holderCount} holders`, severity: 'medium' }); }
   else if (holderCount >= 300) safe.push({ label: 'Holder Count', desc: `${holderCount.toLocaleString()} holders` });
 
-  // ── CONTRACT VERIFICATION ──
   if (etherscan?.SourceCode === '') { score += 10; flags.push({ label: 'Unverified Contract', desc: 'Source code hidden — cannot be audited', severity: 'high' }); }
   else if (etherscan?.SourceCode)   safe.push({ label: 'Verified Contract', desc: 'Source code publicly auditable' });
 
-  // ── LIQUIDITY AMOUNT ──
-  const liqUSD = parseFloat(dex?.liquidity?.usd || 0);
-  if (dex && liqUSD === 0)               { score += 15; flags.push({ label: 'Zero Liquidity',             desc: 'No liquidity found — cannot trade safely', severity: 'critical' }); }
-  else if (liqUSD > 0 && liqUSD < 1000)  { score += 15; flags.push({ label: 'Dangerously Low Liquidity', desc: `Only $${liqUSD.toLocaleString()}`, severity: 'critical' }); }
-  else if (liqUSD >= 1000 && liqUSD < 5000)  { score += 8; flags.push({ label: 'Very Low Liquidity',    desc: `$${liqUSD.toLocaleString()}`, severity: 'high' }); }
-  else if (liqUSD >= 5000 && liqUSD < 20000) { score += 3; flags.push({ label: 'Low Liquidity',         desc: `$${liqUSD.toLocaleString()}`, severity: 'medium' }); }
-  else if (liqUSD >= 20000) safe.push({ label: 'Good Liquidity', desc: `$${liqUSD.toLocaleString()}` });
+  // Liquidity (only if not already flagged as dead token above)
+  if (!flags.find(f => f.label === 'Dead Token — No Liquidity')) {
+    if (liqUSD > 0 && liqUSD < 1000)             { score += 15; flags.push({ label: 'Dangerously Low Liquidity', desc: `Only $${liqUSD.toLocaleString()}`, severity: 'critical' }); }
+    else if (liqUSD >= 1000 && liqUSD < 5000)    { score += 8;  flags.push({ label: 'Very Low Liquidity',        desc: `$${liqUSD.toLocaleString()}`, severity: 'high' }); }
+    else if (liqUSD >= 5000 && liqUSD < 20000)   { score += 3;  flags.push({ label: 'Low Liquidity',             desc: `$${liqUSD.toLocaleString()}`, severity: 'medium' }); }
+    else if (liqUSD >= 20000) safe.push({ label: 'Good Liquidity', desc: `$${liqUSD.toLocaleString()}` });
+  }
 
-  // ── COMPOUNDING ──
   const criticalCount = flags.filter(f => f.severity === 'critical').length;
-  const highCount = flags.filter(f => f.severity === 'high').length;
   if (criticalCount >= 3) score += 15;
   else if (criticalCount >= 2) score += 8;
   if (lpUnlocked && ownerActive && isMintable) score += 15;
@@ -339,7 +409,6 @@ function calculateScore(goplus, honeypot, dex, etherscan, chain = 'ETH', address
   return { score: Math.min(score, 100), risk: score >= 40 ? 'HIGH' : score >= 20 ? 'MEDIUM' : 'LOW', flags, safe };
 }
 
-// ── ROUTES ────────────────────────────────────────────────────────────────────
 app.get('/api/health', (_, res) => res.json({ status: 'ok', db: 'supabase', chains: Object.keys(CHAIN_CONFIG).length }));
 
 app.post('/api/scan', async (req, res) => {
@@ -348,21 +417,25 @@ app.post('/api/scan', async (req, res) => {
   const chainCfg = CHAIN_CONFIG[chain];
   if (!chainCfg) return res.status(400).json({ error: 'Unsupported chain' });
   try {
-    const [gp, hp, dx, eth, rc] = await Promise.allSettled([
+    const [gp, hp, dx, eth, rc, dr] = await Promise.allSettled([
       fetchGoPlus(address, chainCfg.goplusId),
       fetchHoneypot(address, chainCfg.goplusId),
       fetchDexScreener(address),
       fetchEtherscan(address, chainCfg.goplusId),
       chain === 'SOL' ? fetchRugcheck(address) : Promise.resolve(null),
+      // Only check deployer for EVM chains with etherscan support
+      chainCfg.etherscanBase ? checkDeployerRisk(address, chainCfg.goplusId) : Promise.resolve(null),
     ]);
-    const goplusData   = gp.status  === 'fulfilled' ? gp.value  : null;
-    const honeypotData = hp.status  === 'fulfilled' ? hp.value  : null;
-    const dexData      = dx.status  === 'fulfilled' ? dx.value  : null;
-    const ethData      = eth.status === 'fulfilled' ? eth.value : null;
-    const rugcheckData = rc.status  === 'fulfilled' ? rc.value  : null;
-    const { score, risk, flags, safe } = calculateScore(goplusData, honeypotData, dexData, ethData, chain, address);
+    const goplusData    = gp.status === 'fulfilled' ? gp.value  : null;
+    const honeypotData  = hp.status === 'fulfilled' ? hp.value  : null;
+    const dexData       = dx.status === 'fulfilled' ? dx.value  : null;
+    const ethData       = eth.status === 'fulfilled' ? eth.value : null;
+    const rugcheckData  = rc.status === 'fulfilled' ? rc.value  : null;
+    const deployerRisk  = dr.status === 'fulfilled' ? dr.value  : null;
 
-    // Supplement with Rugcheck.xyz data for Solana tokens
+    const { score, risk, flags, safe } = calculateScore(goplusData, honeypotData, dexData, ethData, chain, address, deployerRisk);
+
+    // Supplement with Rugcheck.xyz data for Solana
     if (chain === 'SOL' && rugcheckData) {
       if (rugcheckData.risks && rugcheckData.risks.length > 0) {
         for (const r of rugcheckData.risks) {
@@ -393,6 +466,7 @@ app.post('/api/scan', async (req, res) => {
         volume24h:      parseFloat(dexData.volume?.h24 || 0),
         priceChange24h: parseFloat(dexData.priceChange?.h24 || 0),
       } : null,
+      deployerInfo: deployerRisk ? { ageInDays: Math.round(deployerRisk.ageInDays), deployer: deployerRisk.deployer } : null,
       sources: { goplus: !!goplusData, honeypot: !!honeypotData, dexscreener: !!dexData, etherscan: !!ethData, rugcheck: !!rugcheckData },
       scannedAt: new Date().toISOString(),
     });
@@ -409,7 +483,7 @@ app.get('/api/user/:email', async (req, res) => {
     }
     const today = new Date().toISOString().split('T')[0];
     const scansToday = user.scan_date === today ? user.scans_today : 0;
-    res.json({ email: user.email, plan: user.plan, unlimited: user.plan !== 'free', scansToday, scansLeft: user.plan !== 'free' ? 999 : Math.max(0, 3 - scansToday) });
+    res.json({ email: user.email, plan: user.plan, unlimited: user.plan !== 'free', scansToday, scansLeft: user.plan !== 'free' ? 999 : Math.max(0, 3 - scansToday), whitelabel_active: user.whitelabel_active });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -466,15 +540,11 @@ app.post('/api/webhook', (req, res) => {
     const plan  = session.metadata?.plan;
     if (email && plan) {
       if (plan === 'whitelabel') {
-        // White-label add-on — activate whitelabel AND upgrade to pro if not already on pro/whale
         supabase.from('users').select('plan').eq('email', email).single().then(({ data: u }) => {
           const newPlan = (u?.plan === 'whale') ? 'whale' : 'pro';
           supabase.from('users').upsert({
-            email,
-            plan: newPlan,
-            stripe_customer_id: session.customer,
-            whitelabel_active: true,
-            whitelabel_subscription_id: session.subscription
+            email, plan: newPlan, stripe_customer_id: session.customer,
+            whitelabel_active: true, whitelabel_subscription_id: session.subscription
           }, { onConflict: 'email' }).then(() => console.log(`✅ White-label activated for ${email} — plan: ${newPlan}`));
         });
       } else {
@@ -485,7 +555,6 @@ app.post('/api/webhook', (req, res) => {
   } else if (event.type === 'invoice.payment_failed' || event.type === 'customer.subscription.deleted') {
     const subId = event.data.object.id || event.data.object.subscription;
     const customerId = event.data.object.customer;
-    // Check if it's a whitelabel sub cancellation
     supabase.from('users').select('*').eq('whitelabel_subscription_id', subId).single()
       .then(({ data: wlUser }) => {
         if (wlUser) {
@@ -493,14 +562,11 @@ app.post('/api/webhook', (req, res) => {
           console.log(`❌ White-label cancelled for ${wlUser.email}`);
         }
       });
-    // Also handle main plan cancellation
     supabase.from('users').select('*').eq('stripe_customer_id', customerId).single()
       .then(({ data: user }) => { if (user && user.whitelabel_subscription_id !== subId) supabase.from('users').update({ plan: 'free' }).eq('email', user.email); });
   }
   res.json({ received: true });
 });
-
-// ── API KEY ROUTES ────────────────────────────────────────────────────────────
 
 app.post('/api/keys/generate', async (req, res) => {
   const { email } = req.body;
@@ -550,9 +616,9 @@ app.post('/api/v1/scan', async (req, res) => {
       fetchDexScreener(address),
       fetchEtherscan(address, chainCfg.goplusId),
     ]);
-    const goplusData   = gp.status  === 'fulfilled' ? gp.value  : null;
-    const honeypotData = hp.status  === 'fulfilled' ? hp.value  : null;
-    const dexData      = dx.status  === 'fulfilled' ? dx.value  : null;
+    const goplusData   = gp.status === 'fulfilled' ? gp.value  : null;
+    const honeypotData = hp.status === 'fulfilled' ? hp.value  : null;
+    const dexData      = dx.status === 'fulfilled' ? dx.value  : null;
     const ethData      = eth.status === 'fulfilled' ? eth.value : null;
     const { score, risk, flags, safe } = calculateScore(goplusData, honeypotData, dexData, ethData, chain, address);
     res.json({
@@ -563,6 +629,7 @@ app.post('/api/v1/scan', async (req, res) => {
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
 app.post('/api/watchlist', async (req, res) => {
   const { email, address, chain, tokenName, tokenSymbol } = req.body;
   try {
@@ -612,7 +679,6 @@ app.post('/api/watchlist/update', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── TELEGRAM ROUTES ───────────────────────────────────────────────────────────
 app.post('/api/telegram/connect', async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'Email required' });
@@ -621,7 +687,7 @@ app.post('/api/telegram/connect', async (req, res) => {
     if (!user || user.plan !== 'whale') return res.status(403).json({ error: 'Whale plan required' });
     const code = Math.random().toString(36).substring(2, 10).toUpperCase();
     pendingVerifications[code] = email;
-    setTimeout(() => delete pendingVerifications[code], 10 * 60 * 1000); // expire in 10 min
+    setTimeout(() => delete pendingVerifications[code], 10 * 60 * 1000);
     res.json({ code, botUsername: 'RugRadarScanBot', deepLink: `https://t.me/RugRadarScanBot?start=${code}` });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -641,19 +707,11 @@ app.post('/api/telegram/disconnect', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-
-// ── WHITE-LABEL ROUTES ────────────────────────────────────────────────────────
-
 app.get('/api/wl/:slug', async (req, res) => {
   try {
     const { data, error } = await supabase.from('whitelabel').select('*').eq('slug', req.params.slug).eq('active', true).single();
     if (error || !data) return res.status(404).json({ error: 'White-label config not found' });
-    res.json({
-      brandName: data.brand_name,
-      logoUrl: data.logo_url,
-      primaryColor: data.primary_color,
-      slug: data.slug,
-    });
+    res.json({ brandName: data.brand_name, logoUrl: data.logo_url, primaryColor: data.primary_color, slug: data.slug });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -661,15 +719,12 @@ app.post('/api/wl', async (req, res) => {
   const { slug, brandName, logoUrl, primaryColor, ownerEmail } = req.body;
   if (!slug || !brandName || !ownerEmail) return res.status(400).json({ error: 'slug, brandName and ownerEmail required' });
   try {
-    const { data: user } = await supabase.from('users').select('plan').eq('email', ownerEmail).single();
-    if (!user || (user.plan !== 'whale' && !user.whitelabel_active)) return res.status(403).json({ error: 'White-label add-on required. Upgrade at rugradar-rho.vercel.app' });
+    const { data: user } = await supabase.from('users').select('plan, whitelabel_active').eq('email', ownerEmail).single();
+    if (!user || !user.whitelabel_active) return res.status(403).json({ error: 'White-label add-on required. Upgrade at rugradar-rho.vercel.app' });
     const { data, error } = await supabase.from('whitelabel').upsert({
       slug: slug.toLowerCase().replace(/[^a-z0-9-]/g, ''),
-      brand_name: brandName,
-      logo_url: logoUrl || null,
-      primary_color: primaryColor || '#ff3b3b',
-      owner_email: ownerEmail,
-      active: true,
+      brand_name: brandName, logo_url: logoUrl || null,
+      primary_color: primaryColor || '#ff3b3b', owner_email: ownerEmail, active: true,
     }, { onConflict: 'slug' }).select().single();
     if (error) throw error;
     res.json({ success: true, url: `https://rugradar-rho.vercel.app?wl=${data.slug}`, ...data });
