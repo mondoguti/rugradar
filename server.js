@@ -229,10 +229,14 @@ function calculateScore(goplus, honeypot, dex, etherscan, chain = 'ETH', address
   const hasGoplusData = !!goplus;
   const hasAnySecurityData = !!goplus || !!honeypot;
 
-  // ── FIX 1: DEAD TOKEN — zero liquidity = instant HIGH RISK ──
+  // ── FIX 1: DEAD TOKEN — zero liquidity OR no DEX data = instant HIGH RISK ──
   const liqUSD = parseFloat(dex?.liquidity?.usd || 0);
   const hasDexData = !!dex;
-  if (hasDexData && liqUSD === 0) {
+  if (!hasDexData && isEVM) {
+    // No DEX pairs found at all — token likely dead, rugged, or never traded
+    score += 50;
+    flags.push({ label: 'No DEX Activity Found', desc: 'Token has no liquidity pools — likely dead, rugged, or never listed', severity: 'critical' });
+  } else if (hasDexData && liqUSD === 0) {
     score += 60;
     flags.push({ label: 'Dead Token — No Liquidity', desc: 'Zero liquidity found — token is dead or already rugged', severity: 'critical' });
   }
