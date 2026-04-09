@@ -16,7 +16,7 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5500';
 const PRICES = {
   pro:        process.env.STRIPE_PRICE_PRO   || 'price_placeholder',
   whale:      process.env.STRIPE_PRICE_WHALE || 'price_placeholder',
-  whitelabel: 'price_1TJmkIFt2DJ7Dwg2rGP9j3Q9',
+  whitelabel: 'price_1TK70WFt2DJ7Dwg2pvDNjD9v',
 };
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || null;
