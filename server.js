@@ -246,13 +246,13 @@ function calculateScore(goplus, honeypot, dex, etherscan, chain = 'ETH', address
   if (pairCreatedAt) {
     const ageInDays = (Date.now() - pairCreatedAt) / (1000 * 60 * 60 * 24);
     if (ageInDays < 1) {
-      score += 25;
+      score += 35;
       flags.push({ label: 'Brand New Token', desc: `Token is only ${Math.round(ageInDays * 24)} hours old — extremely unproven`, severity: 'critical' });
     } else if (ageInDays < 7) {
-      score += 20;
+      score += 25;
       flags.push({ label: 'Very New Token', desc: `Token is ${Math.round(ageInDays)} days old — unproven and high risk`, severity: 'high' });
     } else if (ageInDays < 30) {
-      score += 5;
+      score += 8;
       flags.push({ label: 'New Token', desc: `Token is ${Math.round(ageInDays)} days old`, severity: 'medium' });
     }
   }
@@ -265,6 +265,18 @@ function calculateScore(goplus, honeypot, dex, etherscan, chain = 'ETH', address
   } else if (priceChange24h <= -60 && liqUSD < 5000) {
     score += 20;
     flags.push({ label: 'Price Crashed', desc: `Down ${Math.abs(priceChange24h).toFixed(0)}% with very low liquidity`, severity: 'high' });
+  }
+
+  // ── PUMP DETECTION — extreme price spike = manipulation signal ──
+  if (priceChange24h >= 500) {
+    score += 30;
+    flags.push({ label: 'Extreme Price Pump', desc: `Up ${priceChange24h.toFixed(0)}% in 24h — classic pump and dump pattern`, severity: 'critical' });
+  } else if (priceChange24h >= 200) {
+    score += 20;
+    flags.push({ label: 'Suspicious Price Spike', desc: `Up ${priceChange24h.toFixed(0)}% in 24h — possible manipulation`, severity: 'high' });
+  } else if (priceChange24h >= 100) {
+    score += 10;
+    flags.push({ label: 'Large Price Increase', desc: `Up ${priceChange24h.toFixed(0)}% in 24h — monitor closely`, severity: 'medium' });
   }
 
   // ── FIX 4: DEPLOYER WALLET AGE ──
