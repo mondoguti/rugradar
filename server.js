@@ -83,6 +83,8 @@ async function startTelegramPolling() {
               `🛡 <b>RugRadar Bot Commands</b>\n\n` +
               `/scan &lt;address&gt; [chain] — Scan a token\n` +
               `/deployer &lt;address&gt; [chain] — Check deployer history\n` +
+              `/newlaunches [chain] — New tokens pre-screened for safety\n` +
+              `/simulate &lt;address&gt; &lt;$amount&gt; — Sell price impact\n` +
               `/watchlist — View your watchlist scores\n` +
               `/status — Check your account\n` +
               `/disconnect — Unlink Telegram\n` +
@@ -191,6 +193,107 @@ async function startTelegramPolling() {
                 await sendTelegramMessage(chatId,
                   `📋 <b>Your Watchlist</b> (${items.length} tokens)\n\n${lines.join('\n')}${summary}\n\n🔗 <a href="https://rugradar-rho.vercel.app/watchlist.html">Manage watchlist</a>`
                 );
+              }
+            }
+          } else if (text.startsWith('/newlaunches')) {
+            const parts = text.split(' ').filter(Boolean);
+            const nlChain = parts[1] ? parts[1].toUpperCase() : null;
+            if (nlChain && !CHAIN_CONFIG[nlChain]) {
+              await sendTelegramMessage(chatId, `❌ Unknown chain: ${nlChain}\nSupported: ${Object.keys(CHAIN_CONFIG).join(', ')}`);
+            } else {
+              await sendTelegramMessage(chatId, `🔍 Fetching new launches${nlChain ? ` on ${nlChain}` : ''}...`);
+              try {
+                const launches = await fetchNewLaunches(nlChain);
+                if (launches.length === 0) {
+                  await sendTelegramMessage(chatId, '❌ No new launches found. Try without a chain filter or try again later.');
+                } else {
+                  // Pre-screen each token
+                  const results = [];
+                  for (const t of launches.slice(0, 5)) {
+                    try {
+                      const chainCfg = CHAIN_CONFIG[t.chain];
+                      if (!chainCfg) continue;
+                      const [gp, dx] = await Promise.allSettled([
+                        fetchGoPlus(t.address, chainCfg.goplusId),
+                        fetchDexScreener(t.address),
+                      ]);
+                      const goplusData = gp.status === 'fulfilled' ? gp.value : null;
+                      const dexData = dx.status === 'fulfilled' ? dx.value : null;
+                      const { score, risk } = calculateScore(goplusData, null, dexData, null, t.chain, t.address);
+                      const name = goplusData?.token_name || dexData?.baseToken?.name || 'Unknown';
+                      const symbol = goplusData?.token_symbol || dexData?.baseToken?.symbol || '???';
+                      const liq = dexData ? parseFloat(dexData.liquidity?.usd || 0) : 0;
+                      const priceChange = dexData ? parseFloat(dexData.priceChange?.h24 || 0) : 0;
+                      const emoji = risk === 'HIGH' ? '🔴' : risk === 'MEDIUM' ? '🟡' : '🟢';
+                      results.push({ name, symbol, score, risk, emoji, liq, priceChange, address: t.address, chain: t.chain });
+                      await new Promise(r => setTimeout(r, 800));
+                    } catch (e) { /* skip */ }
+                  }
+                  if (results.length === 0) {
+                    await sendTelegramMessage(chatId, '❌ Could not scan any new launches. Try again.');
+                  } else {
+                    // Sort: safest first
+                    results.sort((a, b) => a.score - b.score);
+                    const lines = results.map((r, i) => {
+                      return `${r.emoji} <b>${r.name}</b> (${r.symbol})\n` +
+                        `   Score: ${r.score}/100 | Liq: $${r.liq.toLocaleString()} | 24h: ${r.priceChange >= 0 ? '+' : ''}${r.priceChange.toFixed(0)}%\n` +
+                        `   <code>${r.address.slice(0,8)}...${r.address.slice(-6)}</code> · ${r.chain}`;
+                    });
+                    await sendTelegramMessage(chatId,
+                      `🚀 <b>New Launches</b>${nlChain ? ` — ${nlChain}` : ''}\n` +
+                      `Sorted safest → riskiest\n\n${lines.join('\n\n')}\n\n` +
+                      `Use /scan &lt;address&gt; for full details`
+                    );
+                  }
+                }
+              } catch (e) {
+                await sendTelegramMessage(chatId, '❌ Failed to fetch new launches.');
+              }
+            }
+          } else if (text.startsWith('/simulate ')) {
+            const parts = text.split(' ').filter(Boolean);
+            const simAddr = parts[1];
+            const simAmount = parseFloat(parts[2]);
+            if (!simAddr || simAddr.length < 10 || !simAmount || simAmount <= 0) {
+              await sendTelegramMessage(chatId, '❌ Usage: /simulate &lt;address&gt; &lt;amount_usd&gt;\nExample: /simulate 0x6982... 5000');
+            } else {
+              await sendTelegramMessage(chatId, `📊 Simulating $${simAmount.toLocaleString()} sell...`);
+              try {
+                const dexData = await fetchDexScreener(simAddr);
+                if (!dexData) {
+                  await sendTelegramMessage(chatId, '❌ No DEX data found for this token.');
+                } else {
+                  const name = dexData.baseToken?.name || 'Unknown';
+                  const symbol = dexData.baseToken?.symbol || '???';
+                  // Run simulations at multiple amounts
+                  const amounts = [simAmount];
+                  if (simAmount >= 1000) amounts.push(simAmount / 2);
+                  amounts.push(simAmount * 2);
+                  amounts.push(simAmount * 5);
+                  amounts.sort((a, b) => a - b);
+                  const sims = amounts.map(a => simulateSellImpact(dexData, a)).filter(Boolean);
+                  if (sims.length === 0) {
+                    await sendTelegramMessage(chatId, '❌ Cannot simulate — no liquidity data available.');
+                  } else {
+                    const lines = sims.map(s => {
+                      const impactEmoji = s.priceImpact > 20 ? '🔴' : s.priceImpact > 5 ? '🟡' : '🟢';
+                      return `${impactEmoji} Sell <b>$${s.sellAmountUSD.toLocaleString()}</b>\n` +
+                        `   You'd get: ~$${s.expectedReturn.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}\n` +
+                        `   Price impact: <b>${s.priceImpact.toFixed(1)}%</b>\n` +
+                        `   New price: $${s.newPrice.toPrecision(4)}`;
+                    });
+                    const liq = parseFloat(dexData.liquidity?.usd || 0);
+                    await sendTelegramMessage(chatId,
+                      `📊 <b>Sell Simulation — ${name} (${symbol})</b>\n` +
+                      `Current price: $${parseFloat(dexData.priceUsd || 0).toPrecision(4)}\n` +
+                      `Pool liquidity: $${liq.toLocaleString()}\n\n` +
+                      `${lines.join('\n\n')}\n\n` +
+                      `⚠️ Based on constant-product AMM math. Real slippage may vary.`
+                    );
+                  }
+                }
+              } catch (e) {
+                await sendTelegramMessage(chatId, '❌ Simulation failed — try again.');
               }
             }
           }
@@ -339,6 +442,53 @@ async function checkDeployerHistory(address, chain = 'ETH') {
     }
     return { deployer, ageInDays: ageInDays ? Math.round(ageInDays) : null, totalContracts, recentChecked: checkedCount, recentDead: deadCount, rugRate: checkedCount > 0 ? Math.round((deadCount / checkedCount) * 100) : null };
   } catch (e) { return null; }
+}
+
+// ── PHASE 2: New token launches from DexScreener ─────────────────────────────
+async function fetchNewLaunches(chain = null) {
+  try {
+    const data = await fetchJSON('https://api.dexscreener.com/token-profiles/latest/v1');
+    if (!data || !Array.isArray(data)) return [];
+    let tokens = data;
+    // Map DexScreener chainId to our chain keys
+    const chainMap = { ethereum: 'ETH', bsc: 'BSC', base: 'BASE', arbitrum: 'ARB', solana: 'SOL', polygon: 'MATIC', avalanche: 'AVAX', fantom: 'FTM', optimism: 'OP', blast: 'BLAST' };
+    if (chain) {
+      const dexChainId = Object.keys(chainMap).find(k => chainMap[k] === chain);
+      if (dexChainId) tokens = tokens.filter(t => t.chainId === dexChainId);
+    }
+    // Return top 8 with chain info
+    return tokens.slice(0, 8).map(t => ({
+      address: t.tokenAddress,
+      chain: chainMap[t.chainId] || t.chainId?.toUpperCase() || 'ETH',
+      chainId: t.chainId,
+      url: t.url,
+    }));
+  } catch (e) { return []; }
+}
+
+// ── PHASE 2: Sell impact simulation using AMM math ───────────────────────────
+function simulateSellImpact(dexData, sellAmountUSD) {
+  if (!dexData) return null;
+  const liqUSD = parseFloat(dexData.liquidity?.usd || 0);
+  const price = parseFloat(dexData.priceUsd || 0);
+  if (liqUSD <= 0 || price <= 0) return null;
+  // Estimate pool reserves (constant product AMM: x * y = k)
+  const quoteReserve = liqUSD / 2; // half of liquidity is the quote side (USD)
+  const tokenReserve = quoteReserve / price;
+  // Selling $X worth of tokens
+  const tokensToSell = sellAmountUSD / price;
+  // Constant product: amountOut = (quoteReserve * tokensToSell) / (tokenReserve + tokensToSell)
+  const amountOut = (quoteReserve * tokensToSell) / (tokenReserve + tokensToSell);
+  const priceImpact = ((sellAmountUSD - amountOut) / sellAmountUSD) * 100;
+  const newPrice = price * (tokenReserve / (tokenReserve + tokensToSell)) ** 2;
+  return {
+    sellAmountUSD,
+    expectedReturn: amountOut,
+    priceImpact: Math.min(priceImpact, 100),
+    newPrice,
+    currentPrice: price,
+    liquidityUSD: liqUSD,
+  };
 }
 
 const TRUSTED_TOKENS = new Set([
