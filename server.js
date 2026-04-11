@@ -78,6 +78,121 @@ async function startTelegramPolling() {
           } else if (text === '/disconnect') {
             await supabase.from('users').update({ telegram_chat_id: null }).eq('telegram_chat_id', chatId.toString());
             await sendTelegramMessage(chatId, '✅ Disconnected. You will no longer receive alerts.');
+          } else if (text === '/help') {
+            await sendTelegramMessage(chatId,
+              `🛡 <b>RugRadar Bot Commands</b>\n\n` +
+              `/scan &lt;address&gt; [chain] — Scan a token\n` +
+              `/deployer &lt;address&gt; [chain] — Check deployer history\n` +
+              `/watchlist — View your watchlist scores\n` +
+              `/status — Check your account\n` +
+              `/disconnect — Unlink Telegram\n` +
+              `/help — Show this menu\n\n` +
+              `Chains: ${Object.keys(CHAIN_CONFIG).join(', ')}`
+            );
+          } else if (text.startsWith('/scan ')) {
+            const parts = text.split(' ').filter(Boolean);
+            const scanAddr = parts[1];
+            const scanChain = (parts[2] || 'ETH').toUpperCase();
+            if (!scanAddr || scanAddr.length < 10) {
+              await sendTelegramMessage(chatId, '❌ Usage: /scan &lt;address&gt; [chain]\nExample: /scan 0x6982... ETH');
+            } else {
+              const chainCfg = CHAIN_CONFIG[scanChain];
+              if (!chainCfg) {
+                await sendTelegramMessage(chatId, `❌ Unsupported chain: ${scanChain}\nSupported: ${Object.keys(CHAIN_CONFIG).join(', ')}`);
+              } else {
+                await sendTelegramMessage(chatId, `🔍 Scanning on ${chainCfg.name}...`);
+                try {
+                  const [gp, hp, dx, eth] = await Promise.allSettled([
+                    fetchGoPlus(scanAddr, chainCfg.goplusId),
+                    fetchHoneypot(scanAddr, chainCfg.goplusId),
+                    fetchDexScreener(scanAddr),
+                    fetchEtherscan(scanAddr, chainCfg.goplusId),
+                  ]);
+                  const goplusData   = gp.status === 'fulfilled' ? gp.value  : null;
+                  const honeypotData = hp.status === 'fulfilled' ? hp.value  : null;
+                  const dexData      = dx.status === 'fulfilled' ? dx.value  : null;
+                  const ethData      = eth.status === 'fulfilled' ? eth.value : null;
+                  const { score, risk, flags, safe } = calculateScore(goplusData, honeypotData, dexData, ethData, scanChain, scanAddr);
+                  const name = goplusData?.token_name || dexData?.baseToken?.name || 'Unknown';
+                  const symbol = goplusData?.token_symbol || dexData?.baseToken?.symbol || '???';
+                  const liq = dexData ? `$${parseFloat(dexData.liquidity?.usd || 0).toLocaleString()}` : 'N/A';
+                  const price = dexData?.priceUsd ? `$${parseFloat(dexData.priceUsd).toPrecision(4)}` : 'N/A';
+                  const riskEmoji = risk === 'HIGH' ? '🔴' : risk === 'MEDIUM' ? '🟡' : '🟢';
+                  const flagList = flags.length > 0 ? flags.slice(0, 6).map(f => `  ⚠️ ${f.label}`).join('\n') : '  None';
+                  const safeList = safe.length > 0 ? safe.slice(0, 4).map(s => `  ✅ ${s.label}`).join('\n') : '  None';
+                  // Track scan for losses-avoided stats
+                  const { data: tgUser } = await supabase.from('users').select('email').eq('telegram_chat_id', chatId.toString()).single();
+                  if (tgUser && risk === 'HIGH') {
+                    await supabase.rpc('increment_avoided', { user_email: tgUser.email }).catch(() => {
+                      // If RPC doesn't exist, silently skip
+                    });
+                  }
+                  await sendTelegramMessage(chatId,
+                    `${riskEmoji} <b>${name} (${symbol})</b>\n\n` +
+                    `Risk Score: <b>${score}/100 — ${risk} RISK</b>\n` +
+                    `Chain: ${chainCfg.name}\nPrice: ${price}\nLiquidity: ${liq}\n\n` +
+                    `<b>Red Flags:</b>\n${flagList}\n\n` +
+                    `<b>Safe Signals:</b>\n${safeList}\n\n` +
+                    `🔗 <a href="https://rugradar-rho.vercel.app">Full scan on RugRadar</a>`
+                  );
+                } catch (e) {
+                  await sendTelegramMessage(chatId, '❌ Scan failed — try again.');
+                }
+              }
+            }
+          } else if (text.startsWith('/deployer ')) {
+            const parts = text.split(' ').filter(Boolean);
+            const depAddr = parts[1];
+            const depChain = (parts[2] || 'ETH').toUpperCase();
+            if (!depAddr || depAddr.length < 10) {
+              await sendTelegramMessage(chatId, '❌ Usage: /deployer &lt;token_address&gt; [chain]');
+            } else {
+              await sendTelegramMessage(chatId, '🔍 Investigating deployer wallet...');
+              const history = await checkDeployerHistory(depAddr, depChain);
+              if (!history) {
+                await sendTelegramMessage(chatId, '❌ Could not find deployer info. This may not be supported on this chain.');
+              } else {
+                const dangerEmoji = history.rugRate >= 60 ? '🔴' : history.rugRate >= 30 ? '🟡' : '🟢';
+                const ageStr = history.ageInDays !== null
+                  ? (history.ageInDays < 1 ? 'Less than 24 hours' : `${history.ageInDays} days`)
+                  : 'Unknown';
+                let verdict = '';
+                if (history.totalContracts >= 5 && history.rugRate >= 60) verdict = '\n\n🚨 <b>SERIAL RUGGER — STAY AWAY</b>';
+                else if (history.totalContracts >= 3 && history.rugRate >= 40) verdict = '\n\n⚠️ <b>High-risk deployer — proceed with extreme caution</b>';
+                else if (history.ageInDays !== null && history.ageInDays < 7) verdict = '\n\n⚠️ <b>Very new wallet — no track record</b>';
+                else if (history.totalContracts <= 1 && history.ageInDays > 30) verdict = '\n\n🟢 Low volume deployer with aged wallet';
+                await sendTelegramMessage(chatId,
+                  `${dangerEmoji} <b>Deployer Report</b>\n\n` +
+                  `Deployer: <code>${history.deployer.slice(0,10)}...${history.deployer.slice(-6)}</code>\n` +
+                  `Wallet Age: <b>${ageStr}</b>\n` +
+                  `Contracts Deployed: <b>${history.totalContracts}</b>\n` +
+                  (history.recentChecked > 0
+                    ? `Recent Tokens Dead/Rugged: <b>${history.recentDead}/${history.recentChecked}</b> (${history.rugRate}% rug rate)\n`
+                    : '') +
+                  verdict
+                );
+              }
+            }
+          } else if (text === '/watchlist') {
+            const { data: user } = await supabase.from('users').select('email').eq('telegram_chat_id', chatId.toString()).single();
+            if (!user) {
+              await sendTelegramMessage(chatId, '❌ Not connected. Visit RugRadar to link your account.');
+            } else {
+              const { data: items } = await supabase.from('watchlist').select('*').eq('user_email', user.email).order('added_at', { ascending: false }).limit(15);
+              if (!items || items.length === 0) {
+                await sendTelegramMessage(chatId, '📋 Your watchlist is empty. Add tokens at rugradar-rho.vercel.app');
+              } else {
+                const lines = items.map(t => {
+                  const emoji = t.last_risk_level === 'HIGH' ? '🔴' : t.last_risk_level === 'MEDIUM' ? '🟡' : '🟢';
+                  return `${emoji} <b>${t.token_name || 'Unknown'}</b> (${t.token_symbol || '???'}) — ${t.last_risk_score ?? '?'}/100`;
+                });
+                const highCount = items.filter(t => t.last_risk_level === 'HIGH').length;
+                const summary = highCount > 0 ? `\n\n⚠️ ${highCount} token${highCount > 1 ? 's' : ''} at HIGH RISK` : '\n\n✅ No HIGH RISK tokens';
+                await sendTelegramMessage(chatId,
+                  `📋 <b>Your Watchlist</b> (${items.length} tokens)\n\n${lines.join('\n')}${summary}\n\n🔗 <a href="https://rugradar-rho.vercel.app/watchlist.html">Manage watchlist</a>`
+                );
+              }
+            }
           }
         }
       }
@@ -192,6 +307,37 @@ async function checkDeployerRisk(contractAddress, chainId) {
     const firstTxDate = new Date(parseInt(firstTx.timeStamp) * 1000);
     const ageInDays = (Date.now() - firstTxDate.getTime()) / (1000 * 60 * 60 * 24);
     return { deployer, ageInDays, firstTxDate: firstTxDate.toISOString() };
+  } catch (e) { return null; }
+}
+
+// ── DEPLOYER HISTORY: count all contracts a deployer has created ──────────────
+async function checkDeployerHistory(address, chain = 'ETH') {
+  try {
+    const chainCfg = CHAIN_CONFIG[chain];
+    if (!chainCfg?.etherscanBase) return null;
+    const base = chainCfg.etherscanBase;
+    const creation = await fetchJSON(`${base}?module=contract&action=getcontractcreation&contractaddresses=${address}&apikey=${ETHERSCAN_KEY}`);
+    const deployer = creation?.result?.[0]?.contractCreator;
+    if (!deployer) return null;
+    const txList = await fetchJSON(`${base}?module=account&action=txlist&address=${deployer}&startblock=0&endblock=99999999&page=1&offset=1&sort=asc&apikey=${ETHERSCAN_KEY}`);
+    const firstTx = txList?.result?.[0];
+    const ageInDays = firstTx ? (Date.now() - parseInt(firstTx.timeStamp) * 1000) / (1000 * 60 * 60 * 24) : null;
+    // Get normal txs — contract creations have empty 'to' field
+    const normalTxs = await fetchJSON(`${base}?module=account&action=txlist&address=${deployer}&startblock=0&endblock=99999999&page=1&offset=200&sort=desc&apikey=${ETHERSCAN_KEY}`);
+    const contractCreations = (normalTxs?.result || []).filter(tx => tx.from?.toLowerCase() === deployer.toLowerCase() && (!tx.to || tx.to === ''));
+    const totalContracts = contractCreations.length;
+    // Check how many of those tokens still have liquidity (quick check on last 5)
+    let deadCount = 0, checkedCount = 0;
+    for (const tx of contractCreations.slice(0, 5)) {
+      if (tx.contractAddress) {
+        try {
+          const dex = await fetchDexScreener(tx.contractAddress);
+          checkedCount++;
+          if (!dex || parseFloat(dex?.liquidity?.usd || 0) < 100) deadCount++;
+        } catch (e) { /* skip */ }
+      }
+    }
+    return { deployer, ageInDays: ageInDays ? Math.round(ageInDays) : null, totalContracts, recentChecked: checkedCount, recentDead: deadCount, rugRate: checkedCount > 0 ? Math.round((deadCount / checkedCount) * 100) : null };
   } catch (e) { return null; }
 }
 
@@ -747,7 +893,151 @@ app.post('/api/wl', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── BACKGROUND WATCHLIST MONITOR (every 30 min) ──────────────────────────────
+async function watchlistCron() {
+  console.log('🔄 Watchlist cron started — rescanning every 30 minutes');
+  const run = async () => {
+    try {
+      const { data: items } = await supabase.from('watchlist').select('*');
+      if (!items || items.length === 0) return;
+      console.log(`🔄 Rescanning ${items.length} watchlist tokens...`);
+      for (const item of items) {
+        try {
+          const chainCfg = CHAIN_CONFIG[item.chain];
+          if (!chainCfg) continue;
+          const [gp, hp, dx, eth] = await Promise.allSettled([
+            fetchGoPlus(item.address, chainCfg.goplusId),
+            fetchHoneypot(item.address, chainCfg.goplusId),
+            fetchDexScreener(item.address),
+            fetchEtherscan(item.address, chainCfg.goplusId),
+          ]);
+          const goplusData   = gp.status === 'fulfilled' ? gp.value  : null;
+          const honeypotData = hp.status === 'fulfilled' ? hp.value  : null;
+          const dexData      = dx.status === 'fulfilled' ? dx.value  : null;
+          const ethData      = eth.status === 'fulfilled' ? eth.value : null;
+          const { score, risk, flags } = calculateScore(goplusData, honeypotData, dexData, ethData, item.chain, item.address);
+          const tokenName = goplusData?.token_name || dexData?.baseToken?.name || item.token_name || 'Unknown';
+          const tokenSymbol = goplusData?.token_symbol || dexData?.baseToken?.symbol || item.token_symbol || '???';
+          const oldScore = item.last_risk_score || 0;
+          const oldRisk = item.last_risk_level || 'LOW';
+          const priceChange = parseFloat(dexData?.priceChange?.h24 || 0);
+
+          await supabase.from('watchlist').update({
+            token_name: tokenName, token_symbol: tokenSymbol,
+            last_risk_level: risk, last_risk_score: score,
+            last_checked: new Date().toISOString()
+          }).eq('user_email', item.user_email).eq('address', item.address).eq('chain', item.chain);
+
+          // Check if user has Telegram connected
+          const { data: user } = await supabase.from('users').select('telegram_chat_id').eq('email', item.user_email).single();
+          if (!user?.telegram_chat_id) continue;
+
+          const riskWorsened = risk === 'HIGH' && oldRisk !== 'HIGH';
+          const scoreSpiked = score >= oldScore + 20;
+          const priceCrashed = priceChange <= -50;
+          const riskEscalated = risk === 'MEDIUM' && oldRisk === 'LOW' && score >= oldScore + 10;
+
+          if (riskWorsened || scoreSpiked) {
+            await sendTelegramMessage(user.telegram_chat_id,
+              `🚨 <b>RISK ALERT</b>\n\n<b>${tokenName} (${tokenSymbol})</b>\n` +
+              `Risk: ${oldRisk} → <b>${risk}</b>\nScore: ${oldScore} → <b>${score}/100</b>\n` +
+              `Chain: ${item.chain}\n\n` +
+              (flags.length > 0 ? `<b>Red Flags:</b>\n${flags.slice(0,5).map(f => `  ⚠️ ${f.label}`).join('\n')}\n\n` : '') +
+              `🔗 <a href="https://rugradar-rho.vercel.app">View on RugRadar</a>`
+            );
+            console.log(`🚨 Alert: ${item.user_email} — ${tokenName} ${oldRisk}→${risk}`);
+          } else if (priceCrashed) {
+            await sendTelegramMessage(user.telegram_chat_id,
+              `📉 <b>PRICE CRASH</b>\n\n<b>${tokenName} (${tokenSymbol})</b>\n` +
+              `Down <b>${Math.abs(priceChange).toFixed(0)}%</b> in 24h\n` +
+              `Risk: <b>${score}/100 — ${risk}</b>\n\n` +
+              `🔗 <a href="https://rugradar-rho.vercel.app">View on RugRadar</a>`
+            );
+          } else if (riskEscalated) {
+            await sendTelegramMessage(user.telegram_chat_id,
+              `⚠️ <b>RISK INCREASING</b>\n\n<b>${tokenName} (${tokenSymbol})</b>\n` +
+              `Risk: LOW → <b>MEDIUM</b> (${oldScore} → ${score})\nChain: ${item.chain}\n\n` +
+              `🔗 <a href="https://rugradar-rho.vercel.app">View on RugRadar</a>`
+            );
+          }
+          await new Promise(r => setTimeout(r, 1500));
+        } catch (e) { console.error(`Cron error for ${item.address}:`, e.message); }
+      }
+      console.log('🔄 Watchlist cron cycle complete');
+    } catch (e) { console.error('Watchlist cron error:', e.message); }
+  };
+  setTimeout(run, 2 * 60 * 1000);
+  setInterval(run, 30 * 60 * 1000);
+}
+
+// ── DAILY SAFETY DIGEST (every 24h) ─────────────────────────────────────────
+async function dailyDigestCron() {
+  console.log('📊 Daily digest cron started');
+  const run = async () => {
+    try {
+      // Get all users with Telegram connected
+      const { data: users } = await supabase.from('users').select('email, telegram_chat_id').not('telegram_chat_id', 'is', null);
+      if (!users || users.length === 0) return;
+      for (const user of users) {
+        try {
+          const { data: items } = await supabase.from('watchlist').select('*').eq('user_email', user.email);
+          if (!items || items.length === 0) continue;
+          const highRisk = items.filter(t => t.last_risk_level === 'HIGH');
+          const medRisk = items.filter(t => t.last_risk_level === 'MEDIUM');
+          const lowRisk = items.filter(t => t.last_risk_level === 'LOW');
+          // Count tokens that changed risk level in last 24h
+          const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+          const recentlyChecked = items.filter(t => t.last_checked && t.last_checked > oneDayAgo);
+          // Losses avoided: count HIGH RISK tokens the user has scanned or watched
+          const lossesAvoided = highRisk.length;
+          const estimatedSavings = lossesAvoided * 350; // conservative avg per rug
+
+          let digest = `☀️ <b>Daily Safety Digest</b>\n\n`;
+          digest += `📋 <b>Watchlist:</b> ${items.length} tokens\n`;
+          digest += `🔴 HIGH RISK: ${highRisk.length}\n`;
+          digest += `🟡 MEDIUM: ${medRisk.length}\n`;
+          digest += `🟢 LOW: ${lowRisk.length}\n`;
+          digest += `🔄 Rescanned last 24h: ${recentlyChecked.length}\n\n`;
+
+          if (highRisk.length > 0) {
+            digest += `⚠️ <b>HIGH RISK Tokens:</b>\n`;
+            for (const t of highRisk.slice(0, 5)) {
+              digest += `  🔴 ${t.token_name || 'Unknown'} (${t.token_symbol || '???'}) — ${t.last_risk_score}/100\n`;
+            }
+            if (highRisk.length > 5) digest += `  ... and ${highRisk.length - 5} more\n`;
+            digest += '\n';
+          }
+
+          if (lossesAvoided > 0) {
+            digest += `💰 <b>Losses Avoided:</b> ${lossesAvoided} high-risk token${lossesAvoided > 1 ? 's' : ''} flagged\n`;
+            digest += `Estimated savings: ~$${estimatedSavings.toLocaleString()}\n\n`;
+          }
+
+          digest += `🔗 <a href="https://rugradar-rho.vercel.app/watchlist.html">Manage watchlist</a>`;
+
+          await sendTelegramMessage(user.telegram_chat_id, digest);
+          await new Promise(r => setTimeout(r, 500));
+        } catch (e) { console.error(`Digest error for ${user.email}:`, e.message); }
+      }
+      console.log('📊 Daily digests sent');
+    } catch (e) { console.error('Daily digest error:', e.message); }
+  };
+  // Calculate ms until next 9:00 AM UTC
+  const now = new Date();
+  const next9am = new Date(now);
+  next9am.setUTCHours(9, 0, 0, 0);
+  if (now >= next9am) next9am.setUTCDate(next9am.getUTCDate() + 1);
+  const msUntil9am = next9am.getTime() - now.getTime();
+  console.log(`📊 First daily digest in ${Math.round(msUntil9am / 1000 / 60)} minutes (9:00 AM UTC)`);
+  setTimeout(() => {
+    run();
+    setInterval(run, 24 * 60 * 60 * 1000);
+  }, msUntil9am);
+}
+
 app.listen(PORT, () => {
   console.log(`🛡 RugRadar running on port ${PORT} — ${Object.keys(CHAIN_CONFIG).length} chains supported`);
   startTelegramPolling();
+  watchlistCron();
+  dailyDigestCron();
 });
