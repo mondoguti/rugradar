@@ -1,0 +1,5 @@
+# runtime state — never commit portfolio/tickets/cache
+data/
+
+# generated synthetic test data — recreate with: node trading-bot/fixtures/generate.js
+fixtures/*.json

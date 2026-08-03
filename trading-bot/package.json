@@ -1,0 +1,6 @@
+{
+  "name": "rugradar-trading-bot",
+  "private": true,
+  "type": "module",
+  "description": "Defined-risk options trading bot sized for small accounts. Paper-first. Executes live only via Robinhood Trading MCP with human confirmation."
+}

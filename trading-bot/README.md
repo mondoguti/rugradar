@@ -1,0 +1,116 @@
+# Options Trading Bot
+
+A defined-risk options trading system sized for a small ($500) account. It scans
+a universe of liquid underlyings, generates directional signals, picks the right
+options structure for the volatility regime, sizes positions against hard risk
+limits, and manages exits mechanically. Execution is paper-first; live orders go
+through the **Robinhood Trading MCP** with Claude Code as the operator and you
+confirming every order.
+
+## Read this first — honest expectations
+
+- **No bot guarantees profits.** Most retail options traders lose money. Anyone
+  selling you a "best in the world" bot is selling you a story. What this system
+  gives you is what actually separates survivors from blown-up accounts:
+  position sizing, defined risk, mechanical exits, and a refusal to trade when
+  conditions are bad.
+- **$500 in options is the hard mode.** One bad undisciplined trade can take
+  30%+ of the account. That's why every limit in `config.js` is enforced in
+  code: max $50 risk per trade, max 2 positions, max 40% deployed, daily loss
+  limit, PDT tracking.
+- **The realistic goal for year one is to still be trading** — with a growing
+  account and 50+ logged trades telling you what your edge actually is. Compounding
+  small edges beats swinging for home runs.
+- **Paper trade first. 20+ trades minimum.** The bot makes this the default;
+  live execution requires deliberate extra steps. If the system can't beat
+  paper, it has no business touching real money.
+
+## How it decides
+
+1. **Signal** (`src/scanner.js`) — daily bars → trend (EMA20/EMA50), momentum
+   (RSI), pullback quality (distance from EMA20 in ATRs), dollar-volume
+   liquidity. Produces direction + 0–100 score. Score ≥ 60 required.
+2. **Volatility regime** (`IV/HV`) — ATM implied volatility vs 20-day realized:
+   - **cheap** (≤0.90): buying premium is acceptable → long call/put
+   - **normal**: defined-risk debit spread (falls back to long without spread approval)
+   - **rich** (≥1.25): premium should be *sold*, not bought → credit spread, or
+     **stand aside** if you don't have spread approval. The bot refusing to
+     trade is a feature.
+3. **Structure** (`src/strategies.js`) — strike selection by delta targets
+   (long ~0.55Δ; credit spreads sell ~0.25Δ), liquidity filters (OI ≥ 100,
+   tight bid/ask), DTE windows (25–60 long, 21–45 spreads), credit spreads must
+   collect ≥25% of width.
+4. **Risk gate** (`src/risk.js`) — every ticket is validated against equity,
+   cash, position count, deployment cap, daily loss limit, and PDT status
+   before it can be executed. Tickets that fail are discarded, not shrunk.
+5. **Exits** (`src/paper.js`) — mechanical: +75% target / −50% stop on longs,
+   50% credit capture on credit spreads, hard time-exit at 7 DTE, max hold 30
+   days. No discretion, no "it might come back".
+
+## Setup
+
+```bash
+# nothing to install — Node 18+ and zero dependencies
+node trading-bot/src/index.js status
+```
+
+Live execution additionally needs the Robinhood pieces (see your Robinhood
+"Agentic Trading" settings):
+
+1. A Robinhood **Agentic account** with options approval (Level 2 = long
+   calls/puts; Level 3 adds spreads — flip `approvals.canTradeSpreads` in
+   `config.js` only after Level 3 approval).
+2. On your machine: `claude mcp add robinhood-trading --transport http https://agent.robinhood.com/mcp/trading`
+3. In Claude Code run `/mcp`, select `robinhood-trading`, authenticate.
+
+## Daily workflow
+
+```bash
+node trading-bot/src/index.js scan       # after market open settles (~10:00 ET)
+node trading-bot/src/index.js paper-buy  # execute tickets in the paper account
+node trading-bot/src/index.js manage     # daily: mark positions, apply exit rules
+node trading-bot/src/index.js status     # portfolio snapshot
+node trading-bot/src/index.js report     # win rate, profit factor, P&L
+```
+
+Or drive it from Claude Code with the included commands:
+
+| Command | What it does |
+|---|---|
+| `/bot-scan` | run scanner, sanity-check tickets (earnings, news, spreads) |
+| `/bot-execute` | place a reviewed ticket live via Robinhood MCP — asks for confirmation on every order |
+| `/bot-manage` | check exits, close live positions (with confirmation) |
+
+Offline/testing mode: `node trading-bot/fixtures/generate.js` then add
+`--fixtures` to any command to run against synthetic data.
+
+## Going live (only after paper proves out)
+
+Checklist before the first real order:
+- [ ] 20+ paper trades logged, `report` shows positive expectancy (profit factor > 1.2)
+- [ ] You understand every trade the bot proposed — including the ones it skipped
+- [ ] Robinhood options approval confirmed; `canTradeSpreads` matches your level
+- [ ] You accept that the whole $500 is money you can lose
+
+Live rules the commands enforce: limit orders at mid only (never market),
+re-quote before placing, stop if price moved >10% from ticket, explicit
+human confirmation on every single order.
+
+## Rules that keep a $500 account alive
+
+- **PDT**: under $25k equity you get 3 day trades per 5 trading days. The bot
+  tracks them and blocks a 4th. Plan to hold overnight.
+- **Never add to losers.** The bot won't; don't override it.
+- **One earnings rule**: don't hold long premium through earnings — IV crush
+  eats the position even when you're right on direction. Check earnings dates
+  before executing (`/bot-scan` asks Claude to flag this).
+- **Commissions/fees**: Robinhood options are $0 commission but $0.03–0.04/contract
+  regulatory fees apply; the paper broker's slippage model approximates real fill costs.
+
+## Disclaimers
+
+This is not financial advice. Options involve substantial risk of loss and are
+not suitable for everyone. Past performance (paper or live) does not guarantee
+future results. You are responsible for every order placed through your
+brokerage account. Data comes from free delayed feeds (CBOE delayed quotes,
+Stooq/Yahoo daily bars) — verify quotes at the broker before executing.

@@ -1,0 +1,30 @@
+// Black-Scholes helpers. Used to compute delta when the data provider
+// doesn't supply greeks (CBOE does; Yahoo doesn't).
+
+function normCdf(x) {
+  // Abramowitz & Stegun 7.1.26 approximation, accurate to ~1e-7.
+  const t = 1 / (1 + 0.2316419 * Math.abs(x));
+  const d = 0.3989422804014327 * Math.exp(-x * x / 2);
+  let p = d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  return x >= 0 ? 1 - p : p;
+}
+
+function d1(spot, strike, t, iv, r) {
+  return (Math.log(spot / strike) + (r + iv * iv / 2) * t) / (iv * Math.sqrt(t));
+}
+
+export function bsDelta({ type, spot, strike, dte, iv, r = 0.04 }) {
+  const t = Math.max(dte, 0.5) / 365;
+  if (!iv || iv <= 0 || !spot || !strike) return null;
+  const nd1 = normCdf(d1(spot, strike, t, iv, r));
+  return type === 'call' ? nd1 : nd1 - 1;
+}
+
+export function bsPrice({ type, spot, strike, dte, iv, r = 0.04 }) {
+  const t = Math.max(dte, 0.5) / 365;
+  if (!iv || iv <= 0) return null;
+  const D1 = d1(spot, strike, t, iv, r);
+  const D2 = D1 - iv * Math.sqrt(t);
+  if (type === 'call') return spot * normCdf(D1) - strike * Math.exp(-r * t) * normCdf(D2);
+  return strike * Math.exp(-r * t) * normCdf(-D2) - spot * normCdf(-D1);
+}
