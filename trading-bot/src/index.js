@@ -125,6 +125,13 @@ async function cmdManage() {
   for (const a of toClose) {
     const pos = portfolio.positions.find((p) => p.id === a.id);
     if (!pos) continue;
+    // NEVER auto-close a live position in local state — the real position
+    // would stay open at the broker. Live closes go through /bot-manage
+    // (Robinhood MCP), which records the actual fill afterwards.
+    if (pos.mode === 'live') {
+      console.log(`  LIVE position ${a.symbol}: close it via /bot-manage in Claude Code, then record the real fill`);
+      continue;
+    }
     const r = closePositionPaper(pos, portfolio, a.reason);
     if (r.blocked) console.log(`  BLOCKED closing ${a.symbol}: ${r.reason}`);
     else console.log(`  CLOSED ${a.symbol} for ${fmtMoney(r.realizedPnl)} realized`);

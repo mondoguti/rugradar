@@ -29,6 +29,14 @@ export default {
       { upToEquity: Infinity, riskPct: 0.05,  maxPositions: 4 },
     ],
     maxDeployedPct: 0.40,       // at most 40% of equity in open premium at once
+    // Same-direction positions within a group are one bet in two costumes —
+    // the validator rejects the second one.
+    correlatedGroups: [
+      ['SPY', 'QQQ', 'IWM'],
+      ['AMD', 'INTC'],
+      ['SOFI', 'HOOD', 'BAC'],
+      ['F', 'RIVN'],
+    ],
     dailyLossLimitPct: 0.10,    // stop opening new trades after -10% day
     pdt: {
       enabled: true,            // accounts under $25k: max 3 day trades per 5 trading days

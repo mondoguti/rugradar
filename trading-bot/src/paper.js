@@ -4,7 +4,7 @@
 
 import config from '../config.js';
 import { getOptionsChain } from './marketdata.js';
-import { savePortfolio } from './portfolio.js';
+import { savePortfolio, etDay } from './portfolio.js';
 import { canDayTrade } from './risk.js';
 
 // Positive position value = what you'd receive closing it (long structures).
@@ -32,6 +32,7 @@ export function executeTicketPaper(ticket, portfolio) {
 
   const position = {
     id: ticket.id,
+    mode: 'paper',                     // live fills recorded via /bot-execute set 'live'
     symbol: ticket.symbol,
     structure: ticket.structure,
     direction: ticket.direction,
@@ -53,32 +54,44 @@ export function executeTicketPaper(ticket, portfolio) {
   return position;
 }
 
-function legMid(chain, leg) {
-  const c = chain.contracts.find(
+function legQuote(chain, leg) {
+  return chain.contracts.find(
     (x) => x.type === leg.type && x.expiry === leg.expiry && x.strike === leg.strike
-  );
-  return c?.mid ?? null;
+  ) ?? null;
 }
 
 // Mark a position: current liquidation value (long) or cost-to-close (credit).
+// Computes two values per position: the fair mid-based mark (drives exit
+// decisions) and a slippage-adjusted exit value (drives paper close fills, so
+// paper results don't flatter themselves — entries already pay slippage).
 export async function markPosition(pos) {
   const chain = await getOptionsChain(pos.symbol);
-  let value = 0;
+  let value = 0;       // at mid
+  let exitValue = 0;   // what you'd actually collect/pay closing, with slippage
   let stale = false;
   for (const leg of pos.legs) {
-    const mid = legMid(chain, leg);
-    if (mid == null) { stale = true; continue; }
-    value += (leg.action === 'buy' ? mid : -mid) * leg.contracts * 100;
+    const q = legQuote(chain, leg);
+    if (q?.mid == null) { stale = true; continue; }
+    const half = (q.ask - q.bid) / 2;
+    // closing reverses the leg: bought legs get sold (receive less than mid),
+    // sold legs get bought back (pay more than mid)
+    const closePx = leg.action === 'buy'
+      ? Math.max(q.mid - half * config.data.slippage, q.bid)
+      : q.mid + half * config.data.slippage;
+    value += (leg.action === 'buy' ? q.mid : -q.mid) * leg.contracts * 100;
+    exitValue += (leg.action === 'buy' ? closePx : -closePx) * leg.contracts * 100;
   }
   const isCredit = pos.entryCredit != null;
   if (isCredit) {
     // value is negative-ish: cost to close the short structure
     const costToClose = -value;
     pos.costToClose = +costToClose.toFixed(2);
+    pos.costToCloseSlipped = +(-exitValue).toFixed(2);
     pos.currentValue = +(pos.entryValue + pos.entryCredit - costToClose).toFixed(2); // collateral + captured premium
     pos.unrealizedPnl = +(pos.entryCredit - costToClose).toFixed(2);
   } else {
     pos.currentValue = +value.toFixed(2);
+    pos.exitValue = +exitValue.toFixed(2);
     pos.unrealizedPnl = +(value - pos.entryValue).toFixed(2);
   }
   pos.markStale = stale;
@@ -93,6 +106,14 @@ export function exitDecision(pos) {
   const kind = isCredit ? 'creditSpread' : pos.structure.includes('spread') ? 'debitSpread' : 'long';
   const target = config.exits.profitTargetPct[kind];
   const stop = config.exits.stopLossPct[kind];
+
+  // A stale mark (missing leg quote) must never drive a P&L-based exit —
+  // only time-based rules below apply until quotes come back.
+  if (pos.markStale) {
+    if (pos.dte != null && pos.dte <= config.exits.timeExitDTE)
+      return { action: 'close', reason: `time exit on stale mark: ${pos.dte} DTE — verify price manually before closing` };
+    return { action: 'hold', reason: 'mark is stale (missing leg quote) — no P&L decision possible' };
+  }
 
   if (isCredit) {
     const captured = pos.entryCredit - (pos.costToClose ?? pos.entryCredit);
@@ -121,19 +142,21 @@ export function exitDecision(pos) {
 
 export function closePositionPaper(pos, portfolio, reason) {
   const isCredit = pos.entryCredit != null;
-  const openedToday = pos.openedAt.slice(0, 10) === new Date().toISOString().slice(0, 10);
+  const openedToday = etDay(pos.openedAt) === etDay();
 
   if (openedToday && !canDayTrade(portfolio)) {
     return { blocked: true, reason: 'PDT: closing today would be a 4th day trade — hold until tomorrow unless catastrophic' };
   }
 
+  // Paper closes fill at the slippage-adjusted price, not the flattering mid.
   let proceeds, realizedPnl;
   if (isCredit) {
-    proceeds = +(pos.entryValue + pos.entryCredit - (pos.costToClose ?? 0)).toFixed(2);
-    realizedPnl = +((pos.entryCredit - (pos.costToClose ?? 0))).toFixed(2);
+    const closeCost = pos.costToCloseSlipped ?? pos.costToClose ?? 0;
+    proceeds = +(pos.entryValue + pos.entryCredit - closeCost).toFixed(2);
+    realizedPnl = +(pos.entryCredit - closeCost).toFixed(2);
   } else {
-    proceeds = pos.currentValue;
-    realizedPnl = +(pos.currentValue - pos.entryValue).toFixed(2);
+    proceeds = pos.exitValue ?? pos.currentValue;
+    realizedPnl = +(proceeds - pos.entryValue).toFixed(2);
   }
 
   portfolio.cash = +(portfolio.cash + proceeds).toFixed(2);

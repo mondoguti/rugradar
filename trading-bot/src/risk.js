@@ -45,6 +45,15 @@ export function validateTicket(ticket, portfolio) {
   if (portfolio.positions.some((p) => p.symbol === ticket.symbol))
     failures.push(`already have an open position in ${ticket.symbol}`);
 
+  const group = config.risk.correlatedGroups.find((g) => g.includes(ticket.symbol));
+  if (group) {
+    const clash = portfolio.positions.find(
+      (p) => p.symbol !== ticket.symbol && group.includes(p.symbol) && p.direction === ticket.direction
+    );
+    if (clash)
+      failures.push(`correlated exposure: already ${clash.direction} ${clash.symbol} (group ${group.join('/')})`);
+  }
+
   const deployed = portfolio.positions.reduce((a, p) => a + p.entryValue, 0);
   if (deployed + cost > eq * config.risk.maxDeployedPct)
     failures.push(`would deploy $${(deployed + cost).toFixed(2)}, over ${config.risk.maxDeployedPct * 100}% of equity`);

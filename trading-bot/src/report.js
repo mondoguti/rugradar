@@ -20,7 +20,8 @@ export function performance(portfolio) {
     winRate: closed.length ? +((wins.length / closed.length) * 100).toFixed(1) : null,
     avgWin: wins.length ? +(grossWin / wins.length).toFixed(2) : null,
     avgLoss: losses.length ? +(-grossLoss / losses.length).toFixed(2) : null,
-    profitFactor: grossLoss > 0 ? +(grossWin / grossLoss).toFixed(2) : (grossWin > 0 ? Infinity : null),
+    // null when there are no losses yet — Infinity is not JSON-representable
+    profitFactor: grossLoss > 0 ? +(grossWin / grossLoss).toFixed(2) : null,
     realizedPnl: +closed.reduce((a, t) => a + t.realizedPnl, 0).toFixed(2),
   };
 }
