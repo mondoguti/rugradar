@@ -4,9 +4,14 @@
 import config from '../config.js';
 import { equity, realizedToday } from './portfolio.js';
 
+// Current sizing tier for an equity level — see config.risk.tiers.
+export function tierFor(eq) {
+  return config.risk.tiers.find((t) => eq <= t.upToEquity) ?? config.risk.tiers[config.risk.tiers.length - 1];
+}
+
 export function riskBudget(portfolio) {
   const eq = equity(portfolio);
-  return Math.min(eq * config.risk.maxRiskPerTradePct, config.risk.maxRiskPerTradeAbs);
+  return eq * tierFor(eq).riskPct;
 }
 
 // Rolling day-trade count over the PDT window (5 trading days ~ 7 calendar days).
@@ -33,8 +38,9 @@ export function validateTicket(ticket, portfolio) {
   const cost = ticket.netDebit ?? ticket.maxLoss; // credit spreads tie up collateral = maxLoss
   if (cost > portfolio.cash) failures.push(`cost $${cost} exceeds cash $${portfolio.cash.toFixed(2)}`);
 
-  if (portfolio.positions.length >= config.risk.maxOpenPositions)
-    failures.push(`already at max open positions (${config.risk.maxOpenPositions})`);
+  const maxPositions = tierFor(eq).maxPositions;
+  if (portfolio.positions.length >= maxPositions)
+    failures.push(`already at max open positions (${maxPositions} at this equity tier)`);
 
   if (portfolio.positions.some((p) => p.symbol === ticket.symbol))
     failures.push(`already have an open position in ${ticket.symbol}`);

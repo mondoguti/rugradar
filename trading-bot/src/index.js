@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import config from '../config.js';
 import { scanUniverse } from './scanner.js';
 import { buildTicket } from './strategies.js';
-import { riskBudget, validateTicket, dayTradesInWindow } from './risk.js';
+import { riskBudget, validateTicket, dayTradesInWindow, tierFor } from './risk.js';
 import { loadPortfolio, savePortfolio, loadTickets, saveTickets, equity } from './portfolio.js';
 import { executeTicketPaper, markPosition, exitDecision, closePositionPaper } from './paper.js';
 import { performance, fmtMoney } from './report.js';
@@ -137,9 +137,11 @@ async function cmdStatus() {
   const eq = equity(portfolio);
   const dt = dayTradesInWindow(portfolio);
   if (asJson) { out({ equity: eq, ...portfolio }, ''); return; }
+  const tier = tierFor(eq);
   console.log(`Equity ${fmtMoney(eq)}  (cash ${fmtMoney(portfolio.cash)}, started ${fmtMoney(portfolio.startingEquity)})`);
+  console.log(`Sizing tier: ${(tier.riskPct * 100).toFixed(1)}% risk/trade = ${fmtMoney(eq * tier.riskPct)} budget, ${tier.maxPositions} position slots`);
   console.log(`Day trades used: ${dt}/${config.risk.pdt.maxDayTrades} in rolling window`);
-  console.log(`Open positions: ${portfolio.positions.length}/${config.risk.maxOpenPositions}`);
+  console.log(`Open positions: ${portfolio.positions.length}/${tier.maxPositions}`);
   for (const p of portfolio.positions) {
     console.log(`  [${p.id}] ${p.symbol} ${p.structure}  in ${fmtMoney(p.entryValue)}  now ${fmtMoney(p.currentValue)}  uP&L ${fmtMoney(p.unrealizedPnl)}  opened ${p.openedAt.slice(0, 10)}`);
   }

@@ -16,9 +16,18 @@ export default {
   ],
 
   risk: {
-    maxRiskPerTradePct: 0.10,   // never risk more than 10% of equity on one trade
-    maxRiskPerTradeAbs: 60,     // ...and never more than $60 regardless of equity
-    maxOpenPositions: 2,        // small account = concentrated attention, not concentrated risk
+    // Graduated sizing — the rinse-and-repeat schedule. As equity compounds,
+    // dollars risked per trade (and therefore contract counts) grow
+    // automatically, while the PERCENTAGE risked steps down because there's
+    // more account to protect. Position slots also unlock with size.
+    //   $500 start:  10% = $50/trade, 2 positions
+    //   at $2,000:  7.5% = $150/trade, 3 positions
+    //   at $10,000:   5% = $500/trade, 4 positions
+    tiers: [
+      { upToEquity: 1000,     riskPct: 0.10,  maxPositions: 2 },
+      { upToEquity: 5000,     riskPct: 0.075, maxPositions: 3 },
+      { upToEquity: Infinity, riskPct: 0.05,  maxPositions: 4 },
+    ],
     maxDeployedPct: 0.40,       // at most 40% of equity in open premium at once
     dailyLossLimitPct: 0.10,    // stop opening new trades after -10% day
     pdt: {

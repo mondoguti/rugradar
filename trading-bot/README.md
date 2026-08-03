@@ -18,6 +18,20 @@ confirming every order.
   30%+ of the account. That's why every limit in `config.js` is enforced in
   code: max $50 risk per trade, max 2 positions, max 40% deployed, daily loss
   limit, PDT tracking.
+- **Scaling is automatic (rinse and repeat).** Position sizing is a percentage
+  of *current* equity, so contract counts compound as the account grows — and
+  the percentage steps down as there's more to protect:
+
+  | Equity | Risk per trade | Position slots |
+  |---|---|---|
+  | up to $1,000 | 10% | 2 |
+  | $1,000–$5,000 | 7.5% | 3 |
+  | above $5,000 | 5% | 4 |
+
+  At $500 that's ~$50/trade and single cheap contracts. At $2,000 it's
+  $150/trade — better underlyings, multiple contracts. At $10,000 it's
+  $500/trade across 4 positions. Same rules, bigger numbers. Deposits count
+  toward equity the same as gains.
 - **The realistic goal for year one is to still be trading** — with a growing
   account and 50+ logged trades telling you what your edge actually is. Compounding
   small edges beats swinging for home runs.
