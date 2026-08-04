@@ -59,19 +59,31 @@ function buildLong(signal, riskBudget) {
   const expiry = pickExpiry(pool.filter(liquid), config.entries.dte.long);
   if (!expiry) return null;
   const atExpiry = pool.filter((c) => c.expiry === expiry);
-  const leg = byDeltaTarget(atExpiry, config.entries.delta.longEntry);
-  if (!leg) return null;
-  // Delta floor: if the only liquid contracts left are far OTM, that's not a
-  // trade, it's a lottery ticket. A 0.07Δ call needs a huge move to ever pay.
-  if (Math.abs(leg.delta) < config.entries.delta.longMin) return null;
 
-  const costPerContract = leg.mid * 100;
-  // For a long option the debit IS the max loss, but our stop cuts it at
-  // stopLossPct — size against the stop, then sanity-check the full debit
-  // never exceeds 2x budget (gap risk).
-  const riskPerContract = costPerContract * config.exits.stopLossPct.long;
-  const contracts = Math.floor(riskBudget / riskPerContract);
-  if (contracts < 1 || costPerContract > riskBudget * 2) return null;
+  // Delta ladder: prefer the 0.55Δ target, but if that contract doesn't fit
+  // the risk budget, walk DOWN the delta ladder toward the 0.35 floor until
+  // one does. Lower delta = cheaper premium = affordable for a small account,
+  // while the floor keeps us out of lottery-ticket territory. Never below it.
+  const { longEntry, longMin } = config.entries.delta;
+  const ladder = atExpiry
+    .filter((c) => liquid(c) && c.delta != null &&
+      Math.abs(c.delta) >= longMin && Math.abs(c.delta) <= longEntry + 0.10)
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+
+  let leg = null, contracts = 0, riskPerContract = 0;
+  for (const c of ladder) {
+    const costPerContract = c.mid * 100;
+    // For a long option the debit IS the max loss, but our stop cuts it at
+    // stopLossPct — size against the stop, then sanity-check the full debit
+    // never exceeds 2x budget (gap risk).
+    const rpc = costPerContract * config.exits.stopLossPct.long;
+    const n = Math.floor(riskBudget / rpc);
+    if (n >= 1 && costPerContract * n <= riskBudget * 2) {
+      leg = c; contracts = n; riskPerContract = rpc;
+      break;
+    }
+  }
+  if (!leg) return null;
 
   return {
     ...ticketBase(signal, `long_${type}`),
