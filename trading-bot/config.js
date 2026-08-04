@@ -4,7 +4,8 @@
 
 export default {
   account: {
-    startingEquity: 500,        // paper account starting balance (USD)
+    startingEquity: 2000,       // paper balance — mirrors the intended go-live
+                                // funding so the record tests the real account
   },
 
   // Liquid, optionable underlyings. ETFs first (tightest spreads), then
