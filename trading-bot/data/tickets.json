@@ -1,1 +1,43 @@
-[]
+[
+  {
+    "id": "a72f16a0",
+    "createdAt": "2026-08-04T03:36:24.706Z",
+    "symbol": "F",
+    "spot": 14.68,
+    "direction": "bullish",
+    "score": 67,
+    "ivRegime": "normal",
+    "structure": "long_call",
+    "status": "executed_paper",
+    "thesis": "uptrend, EMA separation 0.50 ATR, slope confirmed; RSI 55",
+    "legs": [
+      {
+        "action": "buy",
+        "type": "call",
+        "expiry": "2026-09-18",
+        "strike": 15,
+        "contracts": 1,
+        "mid": 0.43,
+        "bid": 0.42,
+        "ask": 0.44,
+        "delta": 0.3863,
+        "iv": 0.336,
+        "openInterest": 33317
+      }
+    ],
+    "netDebit": 43,
+    "maxLoss": 43,
+    "plannedRisk": 43,
+    "maxGain": null,
+    "breakeven": 15.43,
+    "dte": 46,
+    "validation": {
+      "ok": true,
+      "failures": [],
+      "warnings": [
+        "earnings date unknown — VERIFY manually before executing (no long premium through earnings)"
+      ]
+    },
+    "earningsDate": null
+  }
+]
