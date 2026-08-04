@@ -66,9 +66,15 @@ confirming every order.
 4. **Risk gate** (`src/risk.js`) — every ticket is validated against equity,
    cash, position count, deployment cap, daily loss limit, and PDT status
    before it can be executed. Tickets that fail are discarded, not shrunk.
-5. **Exits** (`src/paper.js`) — mechanical: +75% target / −50% stop on longs,
-   50% credit capture on credit spreads, hard time-exit at 7 DTE, max hold 30
-   days. No discretion, no "it might come back".
+5. **Exits** (`src/paper.js`) — mechanical, and for long options they live on
+   the CHART, not the option price (premium-percentage stops harvest noise —
+   the first real backtest proved it). Longs exit when the underlying breaks
+   the setup (closes beyond EMA20 by 0.5 ATR against the trade), with a −65%
+   hard stop as gap insurance and a trailing stop that lets winners run: at
+   +60% the position arms a trail and closes only after giving back 35% from
+   peak. Spreads keep fixed targets (capped payoff). Hard time-exit at 7 DTE,
+   max hold 30 days. No discretion, no "it might come back".
+   Sizing note: a long option's full premium counts as its planned risk.
 
 ## Setup
 

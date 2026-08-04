@@ -2,7 +2,7 @@
 // signal with a 0-100 conviction score plus a volatility regime that decides
 // WHICH structure to trade (buy premium when it's cheap, sell it when rich).
 
-import { ema, rsi, atr, historicalVol, avgDollarVolume } from './indicators.js';
+import { ema, emaSeries, rsi, atr, historicalVol, avgDollarVolume } from './indicators.js';
 import { getDailyHistory, getOptionsChain } from './marketdata.js';
 import config from '../config.js';
 
@@ -21,56 +21,62 @@ function atmIV(chain) {
   return near.reduce((a, c) => a + c.iv, 0) / near.length;
 }
 
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+
 export function analyzeBars(bars) {
   const closes = bars.map((b) => b.close);
   const last = bars[bars.length - 1];
   const e20 = ema(closes, 20);
   const e50 = ema(closes, 50);
+  const e50s = emaSeries(closes, 50);
   const r = rsi(closes, 14);
   const a = atr(bars, 14);
   const hv = historicalVol(closes, 20);
   const adv = avgDollarVolume(bars, 20);
-  if ([e20, e50, r, a, hv].some((v) => v == null)) return null;
+  if ([e20, e50, r, a, hv].some((v) => v == null) || e50s.length < 11) return null;
 
   const close = last.close;
-  const trendUp = e20 > e50 && close > e20 * 0.995;
-  const trendDown = e20 < e50 && close < e20 * 1.005;
+  const e50Prev = e50s[e50s.length - 11]; // EMA50 ten bars ago — slope confirmation
+  // Structure AND slope must agree — a fresh crossover against a falling
+  // EMA50 is not yet a trend.
+  const trendUp = e20 > e50 && e50 > e50Prev && close > e20 * 0.99;
+  const trendDown = e20 < e50 && e50 < e50Prev && close < e20 * 1.01;
 
-  let direction = 'neutral';
-  let score = 0;
-  const reasons = [];
-
-  if (trendUp) {
-    direction = 'bullish';
-    score += 40;
-    reasons.push('uptrend (EMA20>EMA50, price above EMA20)');
-    if (r >= 45 && r <= 68) { score += 25; reasons.push(`RSI ${r.toFixed(0)} healthy`); }
-    else if (r < 45) { score += 10; reasons.push(`RSI ${r.toFixed(0)} soft`); }
-    else { score += 5; reasons.push(`RSI ${r.toFixed(0)} stretched`); }
-    // pullback entry: price within 1 ATR of EMA20 beats chasing extension
-    if (Math.abs(close - e20) <= a) { score += 20; reasons.push('pullback to EMA20 (good entry)'); }
-    else if ((close - e20) / a <= 2.5) { score += 10; }
-    else reasons.push('extended >2.5 ATR above EMA20');
-  } else if (trendDown) {
-    direction = 'bearish';
-    score += 40;
-    reasons.push('downtrend (EMA20<EMA50, price below EMA20)');
-    if (r <= 55 && r >= 32) { score += 25; reasons.push(`RSI ${r.toFixed(0)} confirming`); }
-    else if (r > 55) { score += 10; reasons.push(`RSI ${r.toFixed(0)} rallying into resistance`); }
-    else { score += 5; reasons.push(`RSI ${r.toFixed(0)} oversold — late`); }
-    if (Math.abs(close - e20) <= a) { score += 20; reasons.push('rally to EMA20 (good entry)'); }
-    else if ((e20 - close) / a <= 2.5) { score += 10; }
-    else reasons.push('extended >2.5 ATR below EMA20');
-  } else {
-    reasons.push('no clear trend — skip');
+  const base = { close, ema20: e20, ema50: e50, rsi: r, atr: a, hv20: hv, avgDollarVolume: adv };
+  if (!trendUp && !trendDown) {
+    return { ...base, direction: 'neutral', score: 0, reasons: ['no confirmed trend (structure + slope) — skip'] };
   }
 
-  // liquidity bonus: $50M+ average daily dollar volume
-  if (adv >= 50e6) score += 15;
-  else if (adv >= 10e6) score += 8;
-  else reasons.push('thin dollar volume');
+  const bullish = trendUp;
+  const distATR = (close - e20) / a; // signed distance from EMA20 in ATRs
+  const chase = bullish ? distATR : -distATR;
 
-  return { close, ema20: e20, ema50: e50, rsi: r, atr: a, hv20: hv, avgDollarVolume: adv, direction, score: Math.min(score, 100), reasons };
+  // Chasing an extended move is not an entry — disqualify, don't just penalize.
+  if (chase > 1.25) {
+    return { ...base, direction: 'neutral', score: 0, reasons: [`${bullish ? 'up' : 'down'}trend but extended ${chase.toFixed(1)} ATR past EMA20 — chasing is not an entry`] };
+  }
+
+  const reasons = [];
+  // Trend strength (0-40): EMA separation in ATRs, saturating at 1.5.
+  const sep = Math.abs(e20 - e50) / a;
+  const trendPts = clamp01(sep / 1.5) * 40;
+  reasons.push(`${bullish ? 'up' : 'down'}trend, EMA separation ${sep.toFixed(2)} ATR, slope confirmed`);
+
+  // Momentum (0-30): RSI in the healthy band for the direction.
+  const rsiIdeal = bullish ? 55 : 45;                 // trending-but-not-exhausted
+  const rsiPts = clamp01(1 - Math.abs(r - rsiIdeal) / 20) * 30;
+  reasons.push(`RSI ${r.toFixed(0)}`);
+
+  // Entry quality (0-15): the closer to EMA20 (without breaking it), the better.
+  const pullPts = clamp01(1 - Math.abs(distATR) / 1.25) * 15;
+  if (pullPts > 10) reasons.push(`good entry: ${Math.abs(distATR).toFixed(1)} ATR from EMA20`);
+
+  // Liquidity (0-15).
+  const volPts = adv >= 50e6 ? 15 : adv >= 10e6 ? 8 : 0;
+  if (!volPts) reasons.push('thin dollar volume');
+
+  const score = Math.round(trendPts + rsiPts + pullPts + volPts);
+  return { ...base, direction: bullish ? 'bullish' : 'bearish', score: Math.min(score, 100), reasons };
 }
 
 export async function scanSymbol(symbol) {

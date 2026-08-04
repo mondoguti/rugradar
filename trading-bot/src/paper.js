@@ -3,7 +3,8 @@
 // works before a single real dollar moves.
 
 import config from '../config.js';
-import { getOptionsChain } from './marketdata.js';
+import { getOptionsChain, getDailyHistory } from './marketdata.js';
+import { ema, atr } from './indicators.js';
 import { savePortfolio, etDay } from './portfolio.js';
 import { canDayTrade } from './risk.js';
 
@@ -97,6 +98,25 @@ export async function markPosition(pos) {
   // track the high-water mark for the trailing stop
   if (!stale) pos.peakPnl = Math.max(pos.peakPnl ?? 0, pos.unrealizedPnl);
   pos.markStale = stale;
+
+  // Thesis check for long options: has the underlying broken the setup?
+  // (Exits live on the chart, not on option-price noise.)
+  if (!isCredit && !pos.structure.includes('spread')) {
+    try {
+      const bars = await getDailyHistory(pos.symbol);
+      const closes = bars.map((b) => b.close);
+      const e20 = ema(closes, 20);
+      const a = atr(bars, 14);
+      const close = closes[closes.length - 1];
+      const m = config.exits.long.thesisStopAtrMult;
+      const bullish = pos.direction === 'bullish';
+      const broken = bullish ? close < e20 - m * a : close > e20 + m * a;
+      pos.thesisBroken = broken;
+      pos.thesisNote = broken
+        ? `underlying ${close.toFixed(2)} closed ${bullish ? 'below' : 'above'} EMA20 ${bullish ? '-' : '+'} ${m} ATR (${(bullish ? e20 - m * a : e20 + m * a).toFixed(2)})`
+        : null;
+    } catch { pos.thesisBroken = false; }
+  }
   pos.dte = Math.min(...pos.legs.map((l) => Math.max(0, Math.round((new Date(`${l.expiry}T21:00:00Z`) - Date.now()) / 86400000))));
   pos.markedAt = new Date().toISOString();
   return pos;
@@ -107,7 +127,7 @@ export function exitDecision(pos) {
   const isCredit = pos.entryCredit != null;
   const kind = isCredit ? 'creditSpread' : pos.structure.includes('spread') ? 'debitSpread' : 'long';
   const target = config.exits.profitTargetPct[kind];
-  const stop = config.exits.stopLossPct[kind];
+  const stop = config.exits.stopLossPct[kind]; // undefined for 'long' — handled below
 
   // A stale mark (missing leg quote) must never drive a P&L-based exit —
   // only time-based rules below apply until quotes come back.
@@ -121,14 +141,20 @@ export function exitDecision(pos) {
     const captured = pos.entryCredit - (pos.costToClose ?? pos.entryCredit);
     if (captured >= pos.entryCredit * target) return { action: 'close', reason: `profit target: captured ${(captured / pos.entryCredit * 100).toFixed(0)}% of credit` };
     if (-pos.unrealizedPnl >= pos.entryCredit * stop) return { action: 'close', reason: `stop: loss ${pos.unrealizedPnl.toFixed(2)} >= ${stop}x credit` };
-  } else {
+  } else if (kind === 'debitSpread') {
     const pnlPct = pos.unrealizedPnl / pos.entryValue;
-    const gainDenom = pos.maxGain ?? pos.entryValue; // spreads target % of max profit
+    const gainDenom = pos.maxGain ?? pos.entryValue;
+    if (pos.unrealizedPnl >= gainDenom * target) return { action: 'close', reason: `profit target: +$${pos.unrealizedPnl} (${(target * 100)}% of max gain)` };
+    if (pnlPct <= -stop) return { action: 'close', reason: `stop loss hit: ${(pnlPct * 100).toFixed(0)}%` };
+  } else {
+    // long options: chart-based exits, not premium-noise stops
+    const pnlPct = pos.unrealizedPnl / pos.entryValue;
     const trail = config.exits.trailing;
-    if (pos.structure.includes('spread')) {
-      if (pos.unrealizedPnl >= gainDenom * target) return { action: 'close', reason: `profit target: +$${pos.unrealizedPnl} (${(target * 100)}% of max gain)` };
-    } else if (trail.enabled) {
-      // trailing mode: no fixed profit cap — arm at +armAtPct, close on giveback
+    if (pnlPct <= -config.exits.long.hardStopPct)
+      return { action: 'close', reason: `hard stop (gap backstop): ${(pnlPct * 100).toFixed(0)}%` };
+    if (pos.thesisBroken)
+      return { action: 'close', reason: `thesis broken: ${pos.thesisNote}` };
+    if (trail.enabled) {
       const peakPct = (pos.peakPnl ?? 0) / pos.entryValue;
       if (peakPct >= trail.armAtPct && pos.unrealizedPnl <= pos.peakPnl * (1 - trail.giveBackPct)) {
         return { action: 'close', reason: `trailing stop: peaked +${(peakPct * 100).toFixed(0)}%, gave back ${(trail.giveBackPct * 100)}% of peak` };
@@ -136,7 +162,6 @@ export function exitDecision(pos) {
     } else if (pnlPct >= target) {
       return { action: 'close', reason: `profit target hit: +${(pnlPct * 100).toFixed(0)}%` };
     }
-    if (pnlPct <= -stop) return { action: 'close', reason: `stop loss hit: ${(pnlPct * 100).toFixed(0)}%` };
   }
 
   if (pos.dte != null && pos.dte <= config.exits.timeExitDTE)

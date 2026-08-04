@@ -56,7 +56,7 @@ export default {
   },
 
   entries: {
-    minScore: 60,               // signal score 0-100 required to trade
+    minScore: 65,               // signal score 0-100 required to trade
     maxTicketsPerScan: 3,
     dte: {                      // days-to-expiration windows per structure
       long: [25, 60],
@@ -99,8 +99,17 @@ export default {
       debitSpread: 0.60,        // spreads have capped max gain — fixed targets stay
       creditSpread: 0.50,       // buy back credit spreads at 50% of credit captured
     },
+    // Long options exit on the CHART, not the option price. Premium-percentage
+    // stops harvest noise — an ATM option swings 30-50% on ordinary days (the
+    // first real backtest proved it: 61 of 93 trades died at a -50% premium
+    // stop). Instead: exit when the underlying breaks the setup, with a deep
+    // hard stop only as gap insurance. Position size assumes the FULL premium
+    // is at risk.
+    long: {
+      thesisStopAtrMult: 0.5,   // exit when underlying closes beyond EMA20 by this many ATRs against the trade
+      hardStopPct: 0.65,        // gap backstop on the premium itself
+    },
     stopLossPct: {
-      long: 0.50,               // close long options at -50% of debit paid
       debitSpread: 0.50,
       creditSpread: 1.00,       // close credit spreads when loss equals credit received
     },

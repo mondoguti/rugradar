@@ -70,18 +70,14 @@ function buildLong(signal, riskBudget) {
       Math.abs(c.delta) >= longMin && Math.abs(c.delta) <= longEntry + 0.10)
     .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
 
-  let leg = null, contracts = 0, riskPerContract = 0;
+  let leg = null, contracts = 0;
   for (const c of ladder) {
+    // The FULL premium is the planned risk — long options can gap to zero,
+    // and thesis-based exits (no tight premium stop) mean drawdowns run
+    // deeper than a fixed stop would pretend. Size accordingly.
     const costPerContract = c.mid * 100;
-    // For a long option the debit IS the max loss, but our stop cuts it at
-    // stopLossPct — size against the stop, then sanity-check the full debit
-    // never exceeds 2x budget (gap risk).
-    const rpc = costPerContract * config.exits.stopLossPct.long;
-    const n = Math.floor(riskBudget / rpc);
-    if (n >= 1 && costPerContract * n <= riskBudget * 2) {
-      leg = c; contracts = n; riskPerContract = rpc;
-      break;
-    }
+    const n = Math.floor(riskBudget / costPerContract);
+    if (n >= 1) { leg = c; contracts = n; break; }
   }
   if (!leg) return null;
 
@@ -90,7 +86,7 @@ function buildLong(signal, riskBudget) {
     legs: [{ action: 'buy', type, expiry: leg.expiry, strike: leg.strike, contracts, mid: leg.mid, bid: leg.bid, ask: leg.ask, delta: leg.delta, iv: leg.iv, openInterest: leg.openInterest }],
     netDebit: +(leg.mid * contracts * 100).toFixed(2),
     maxLoss: +(leg.mid * contracts * 100).toFixed(2),
-    plannedRisk: +(riskPerContract * contracts).toFixed(2),
+    plannedRisk: +(leg.mid * contracts * 100).toFixed(2),
     maxGain: null, // unlimited (call) / substantial (put)
     breakeven: type === 'call' ? +(leg.strike + leg.mid).toFixed(2) : +(leg.strike - leg.mid).toFixed(2),
     dte: leg.dte,

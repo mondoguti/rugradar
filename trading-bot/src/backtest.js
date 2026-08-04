@@ -11,7 +11,7 @@
 import config from '../config.js';
 import { getDailyHistory } from './marketdata.js';
 import { analyzeBars } from './scanner.js';
-import { historicalVol } from './indicators.js';
+import { historicalVol, ema, atr } from './indicators.js';
 import { bsPrice } from './bs.js';
 import { tierFor } from './risk.js';
 
@@ -74,13 +74,23 @@ export async function backtest({ symbols = config.universe, days = 750, starting
         pos.peakPnl = Math.max(pos.peakPnl, pnl);
 
         const trail = config.exits.trailing;
-        const stop = config.exits.stopLossPct.long;
         let exit = null;
-        if (pnlPct <= -stop) exit = 'stop loss';
-        else if (trail.enabled) {
+        // chart-based exits mirroring the live bot: hard stop, thesis break, trail, time
+        if (pnlPct <= -config.exits.long.hardStopPct) exit = 'hard stop';
+        if (!exit) {
+          const e20 = ema(window.map((b) => b.close), 20);
+          const a14 = atr(window, 14);
+          if (e20 != null && a14 != null) {
+            const m = config.exits.long.thesisStopAtrMult;
+            const broken = pos.type === 'call' ? today.close < e20 - m * a14 : today.close > e20 + m * a14;
+            if (broken) exit = 'thesis broken';
+          }
+        }
+        if (!exit && trail.enabled) {
           const peakPct = pos.peakPnl / pos.cost;
           if (peakPct >= trail.armAtPct && pnl <= pos.peakPnl * (1 - trail.giveBackPct)) exit = 'trailing stop';
-        } else if (pnlPct >= config.exits.profitTargetPct.long) exit = 'profit target';
+        }
+        if (!exit && !trail.enabled && pnlPct >= config.exits.profitTargetPct.long) exit = 'profit target';
         if (!exit && pos.dteLeft * TRADING_TO_CAL <= config.exits.timeExitDTE) exit = 'time exit';
         if (!exit && pos.heldDays >= config.exits.maxHoldDays) exit = 'max hold';
         if (exit) closePos(pos, prem, today.date, exit);
@@ -98,9 +108,9 @@ export async function backtest({ symbols = config.universe, days = 750, starting
         const entryPremium = prem * (1 + SLIP);
         const costPer = entryPremium * 100;
         const budget = equity * tierFor(equity).riskPct;
-        const riskPer = costPer * config.exits.stopLossPct.long;
-        const contracts = Math.floor(budget / riskPer);
-        if (contracts < 1 || costPer * contracts > budget * 2 || costPer * contracts > equity * config.risk.maxDeployedPct) continue;
+        // full premium = planned risk (mirrors live sizing)
+        const contracts = Math.floor(budget / costPer);
+        if (contracts < 1 || costPer * contracts > equity * config.risk.maxDeployedPct) continue;
         const cost = costPer * contracts;
         equity -= cost;
         open.set(symbol, {
