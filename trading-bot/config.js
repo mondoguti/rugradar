@@ -82,6 +82,9 @@ export default {
       rich: 1.25,               // above this: premium is expensive -> sell it (spreads) or stand aside
       cheap: 0.90,              // below this: premium is cheap -> buying is acceptable
     },
+    // Don't fight the tape: no bullish entries while SPY is in a confirmed
+    // downtrend, no bearish entries while it's in a confirmed uptrend.
+    marketRegimeFilter: true,
   },
 
   exits: {

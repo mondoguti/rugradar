@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import config from '../config.js';
-import { scanUniverse } from './scanner.js';
+import { scanUniverse, marketRegime } from './scanner.js';
 import { discoverUniverse } from './universe.js';
 import { earningsCheck } from './earnings.js';
 import { buildTicket } from './strategies.js';
@@ -39,11 +39,18 @@ async function cmdScan() {
   const { results, errors } = await scanUniverse(universe);
   for (const e of errors) console.error(`  ! ${e.symbol}: ${e.error}`);
 
+  const regime = config.entries.marketRegimeFilter ? await marketRegime() : 'neutral';
+  if (regime !== 'neutral') console.error(`Market regime (SPY): ${regime}trend — ${regime === 'up' ? 'bearish' : 'bullish'} entries blocked`);
+
   const candidates = results.filter((s) => s.direction !== 'neutral' && s.score >= config.entries.minScore);
   const tickets = [];
   const skips = [];
   for (const signal of candidates) {
     if (tickets.length >= config.entries.maxTicketsPerScan) break;
+    if ((regime === 'down' && signal.direction === 'bullish') || (regime === 'up' && signal.direction === 'bearish')) {
+      skips.push({ skipped: true, symbol: signal.symbol, reason: `market regime: SPY ${regime}trend — no ${signal.direction} entries against the tape` });
+      continue;
+    }
     const t = buildTicket(signal, budget);
     if (t.skipped) { skips.push(t); continue; }
     const v = validateTicket(t, portfolio);
@@ -181,8 +188,9 @@ async function cmdBacktest() {
   const offsetArg = args.find((a) => a.startsWith('--offset='));
   const days = daysArg ? parseInt(daysArg.split('=')[1], 10) : 750;
   const offset = offsetArg ? parseInt(offsetArg.split('=')[1], 10) : 0;
-  console.error(`Backtesting ${config.universe.length} symbols over ~${days} bars${offset ? ` ending ${offset} bars ago (OUT-OF-SAMPLE window)` : ' (recent window — the one the strategy was tuned on)'}...`);
-  const r = await backtest({ days, offset });
+  const regimeFilter = !args.includes('--no-regime') && config.entries.marketRegimeFilter;
+  console.error(`Backtesting ${config.universe.length} symbols over ~${days} bars${offset ? ` ending ${offset} bars ago (OUT-OF-SAMPLE window)` : ' (recent window — the one the strategy was tuned on)'}${regimeFilter ? ', SPY regime filter ON' : ', regime filter OFF'}...`);
+  const r = await backtest({ days, offset, regimeFilter });
   if (asJson) { out(r, ''); return; }
   const { closed, ...stats } = r;
   console.log(`\nSymbols with data: ${stats.symbols.join(', ')}`);

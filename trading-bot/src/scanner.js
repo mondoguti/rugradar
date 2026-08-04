@@ -99,6 +99,23 @@ export async function scanSymbol(symbol) {
   return { symbol, ...a, atmIV: iv, ivOverHv: ivHv, ivRegime: regime, chain };
 }
 
+// Broad-market regime from SPY: 'up' | 'down' | 'neutral'. Same structure+slope
+// test as individual signals. Neutral (including any fetch failure) blocks nothing.
+export async function marketRegime() {
+  try {
+    const bars = await getDailyHistory('SPY');
+    const closes = bars.map((b) => b.close);
+    const e20 = ema(closes, 20);
+    const e50 = ema(closes, 50);
+    const s = emaSeries(closes, 50);
+    if (e20 == null || e50 == null || s.length < 11) return 'neutral';
+    const e50Prev = s[s.length - 11];
+    if (e20 > e50 && e50 > e50Prev) return 'up';
+    if (e20 < e50 && e50 < e50Prev) return 'down';
+    return 'neutral';
+  } catch { return 'neutral'; }
+}
+
 export async function scanUniverse(universe = config.universe) {
   const results = [];
   const errors = [];

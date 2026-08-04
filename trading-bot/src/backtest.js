@@ -11,11 +11,15 @@
 import config from '../config.js';
 import { getDailyHistory } from './marketdata.js';
 import { analyzeBars } from './scanner.js';
-import { historicalVol, ema, atr } from './indicators.js';
+import { historicalVol, ema, emaSeries, atr } from './indicators.js';
 import { bsPrice } from './bs.js';
 import { tierFor } from './risk.js';
 
+// Honest cost model — deliberately pessimistic. Every test should be HARDER
+// to pass than reality, not easier.
 const SLIP = 0.03;              // 3% haircut each way on premium
+const HALF_SPREAD_FLOOR = 0.02; // cheap options: at least 2c given up per side
+const FEE = 0.04;               // per-contract regulatory fees, each way
 const ENTRY_DTE = 45;           // model entries as ~45 DTE ATM options
 const TRADING_TO_CAL = 1.4;     // trading days -> calendar days
 
@@ -28,7 +32,7 @@ function priceOption(type, spot, strike, tradingDteLeft, iv) {
 // out-of-sample lever. Tuning happened against the recent window (offset 0);
 // a strategy that only wins there is curve-fit. Run with offset >= days to
 // validate on data the tuning never saw.
-export async function backtest({ symbols = config.universe, days = 750, offset = 0, startingEquity = config.account.startingEquity } = {}) {
+export async function backtest({ symbols = config.universe, days = 750, offset = 0, startingEquity = config.account.startingEquity, regimeFilter = config.entries.marketRegimeFilter } = {}) {
   // preload history
   const histories = {};
   for (const s of symbols) {
@@ -41,6 +45,29 @@ export async function backtest({ symbols = config.universe, days = 750, offset =
   const symsOk = Object.keys(histories);
   const maxLen = Math.max(...symsOk.map((s) => histories[s].length));
 
+  // SPY regime per distance-from-tail, mirroring the live scanner's filter.
+  const spyBars = histories['SPY'];
+  const regimeCache = new Map();
+  const regimeAt = (offsetFromTail) => {
+    if (!regimeFilter || !spyBars) return 'neutral';
+    if (regimeCache.has(offsetFromTail)) return regimeCache.get(offsetFromTail);
+    let r = 'neutral';
+    const idx = spyBars.length - offsetFromTail;
+    if (idx >= 61) {
+      const closes = spyBars.slice(0, idx).map((b) => b.close);
+      const e20 = ema(closes, 20);
+      const e50 = ema(closes, 50);
+      const s = emaSeries(closes, 50);
+      if (e20 != null && e50 != null && s.length >= 11) {
+        const e50Prev = s[s.length - 11];
+        if (e20 > e50 && e50 > e50Prev) r = 'up';
+        else if (e20 < e50 && e50 < e50Prev) r = 'down';
+      }
+    }
+    regimeCache.set(offsetFromTail, r);
+    return r;
+  };
+
   let equity = startingEquity;
   let peakEquity = equity;
   let maxDrawdown = 0;
@@ -49,7 +76,8 @@ export async function backtest({ symbols = config.universe, days = 750, offset =
   const curve = [];
 
   const closePos = (pos, exitPremium, date, reason) => {
-    const proceeds = exitPremium * (1 - SLIP) * pos.contracts * 100;
+    const exitPx = Math.max(exitPremium * (1 - SLIP) - HALF_SPREAD_FLOOR, 0);
+    const proceeds = Math.max(exitPx * pos.contracts * 100 - FEE * pos.contracts, 0);
     const pnl = +(proceeds - pos.cost).toFixed(2);
     equity += proceeds;
     closed.push({ symbol: pos.symbol, type: pos.type, entryDate: pos.entryDate, exitDate: date, pnl, reason, heldDays: pos.heldDays });
@@ -74,7 +102,7 @@ export async function backtest({ symbols = config.universe, days = 750, offset =
         const iv = Math.max(hv, 0.10);
         const prem = priceOption(pos.type, today.close, pos.strike, pos.dteLeft, iv);
         const value = prem * pos.contracts * 100;
-        const pnl = value * (1 - SLIP) - pos.cost;
+        const pnl = Math.max(prem * (1 - SLIP) - HALF_SPREAD_FLOOR, 0) * pos.contracts * 100 - FEE * pos.contracts - pos.cost;
         const pnlPct = pnl / pos.cost;
         pos.peakPnl = Math.max(pos.peakPnl, pnl);
 
@@ -105,13 +133,15 @@ export async function backtest({ symbols = config.universe, days = 750, offset =
       if (!open.has(symbol) && open.size < tierFor(equity).maxPositions) {
         const sig = analyzeBars(window);
         if (!sig || sig.direction === 'neutral' || sig.score < config.entries.minScore) continue;
+        const regime = regimeAt(offset);
+        if ((regime === 'down' && sig.direction === 'bullish') || (regime === 'up' && sig.direction === 'bearish')) continue;
         const type = sig.direction === 'bullish' ? 'call' : 'put';
         const iv = Math.max(sig.hv20, 0.10);
         const strike = today.close; // ATM ~0.5 delta
         const prem = priceOption(type, today.close, strike, ENTRY_DTE / TRADING_TO_CAL, iv);
         if (prem < 0.05) continue;
-        const entryPremium = prem * (1 + SLIP);
-        const costPer = entryPremium * 100;
+        const entryPremium = prem * (1 + SLIP) + HALF_SPREAD_FLOOR;
+        const costPer = entryPremium * 100 + FEE;
         const budget = equity * tierFor(equity).riskPct;
         // full premium = planned risk (mirrors live sizing)
         const contracts = Math.floor(budget / costPer);
