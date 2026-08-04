@@ -65,6 +65,24 @@ async function cmdScan() {
   }
   saveTickets(tickets);
 
+  // Journal today's ATM IV per symbol — free feeds have no IV history, so we
+  // build our own. Months of these snapshots unlock honest IV-rank signals
+  // and credit-spread research that the backtester can't do today.
+  try {
+    const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+    const jf = path.join(ROOT, 'data', 'iv-history.jsonl');
+    fs.mkdirSync(path.dirname(jf), { recursive: true });
+    const today = new Date().toISOString().slice(0, 10);
+    const existing = fs.existsSync(jf) ? fs.readFileSync(jf, 'utf8') : '';
+    const add = results
+      .filter((s) => s.atmIV && s.ivOverHv && !existing.includes(`"date":"${today}","symbol":"${s.symbol}"`))
+      .map((s) => JSON.stringify({ date: today, symbol: s.symbol, close: s.close, hv20: +s.hv20.toFixed(4), atmIV: +s.atmIV.toFixed(4), ivOverHv: +s.ivOverHv.toFixed(3) }));
+    if (add.length) {
+      fs.appendFileSync(jf, add.join('\n') + '\n');
+      console.error(`IV journal: recorded ${add.length} symbol(s) for ${today}`);
+    }
+  } catch { /* journaling is best-effort, never blocks trading */ }
+
   if (asJson) {
     out({ signals: results.map(({ chain, ...s }) => s), tickets, skips }, '');
     return;
@@ -214,6 +232,22 @@ async function cmdAutopilot() {
   await cmdManage();
   console.log('--- scan for setups ---');
   await cmdScan();
+  // Unattended runs must not violate the earnings discipline: tickets whose
+  // earnings date is unknown are HELD, not bought. The operator (human or the
+  // scheduled Claude routine) verifies the date and flips them back to
+  // "pending" only when earnings fall after expiry.
+  const heldTickets = loadTickets();
+  let held = 0;
+  for (const t of heldTickets) {
+    if (t.status === 'pending' && t.validation?.warnings?.some((w) => w.includes('earnings date unknown'))) {
+      t.status = 'needs_earnings_verification';
+      held++;
+    }
+  }
+  if (held) {
+    saveTickets(heldTickets);
+    console.log(`HELD ${held} ticket(s) pending earnings verification — if the company's next earnings date is AFTER the option expiry, set status back to "pending" in trading-bot/data/tickets.json and re-run paper-buy; otherwise discard.`);
+  }
   console.log('--- paper-execute passing tickets ---');
   await cmdPaperBuy();
   console.log('--- portfolio after run ---');
