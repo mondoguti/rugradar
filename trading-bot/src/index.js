@@ -189,8 +189,10 @@ async function cmdBacktest() {
   const days = daysArg ? parseInt(daysArg.split('=')[1], 10) : 750;
   const offset = offsetArg ? parseInt(offsetArg.split('=')[1], 10) : 0;
   const regimeFilter = !args.includes('--no-regime') && config.entries.marketRegimeFilter;
-  console.error(`Backtesting ${config.universe.length} symbols over ~${days} bars${offset ? ` ending ${offset} bars ago (OUT-OF-SAMPLE window)` : ' (recent window — the one the strategy was tuned on)'}${regimeFilter ? ', SPY regime filter ON' : ', regime filter OFF'}...`);
-  const r = await backtest({ days, offset, regimeFilter });
+  const stratArg = args.find((a) => a.startsWith('--strategy='));
+  const strategy = stratArg ? stratArg.split('=')[1] : 'long';
+  console.error(`Backtesting ${config.universe.length} symbols over ~${days} bars${offset ? ` ending ${offset} bars ago (OUT-OF-SAMPLE window)` : ' (recent window — the one the strategy was tuned on)'}${regimeFilter ? ', SPY regime filter ON' : ', regime filter OFF'}, strategy: ${strategy.toUpperCase()}${strategy === 'credit' ? ' (selling 25-delta spreads, ZERO variance-risk-premium assumed)' : ''}...`);
+  const r = await backtest({ days, offset, regimeFilter, strategy });
   if (asJson) { out(r, ''); return; }
   const { closed, ...stats } = r;
   console.log(`\nSymbols with data: ${stats.symbols.join(', ')}`);

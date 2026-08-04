@@ -28,11 +28,27 @@ function priceOption(type, spot, strike, tradingDteLeft, iv) {
   return bsPrice({ type, spot, strike, dte, iv, r: config.data.riskFreeRate }) ?? 0;
 }
 
+// Strike whose Black-Scholes |delta| is ~0.25 — the standard short strike for
+// credit spreads. Inverse-normal of 0.75 = 0.6745.
+const D1_FOR_25_DELTA = 0.6744897;
+function strikeAt25Delta(type, spot, tradingDte, iv) {
+  const T = Math.max(tradingDte * TRADING_TO_CAL, 1) / 365;
+  const d1 = type === 'put' ? D1_FOR_25_DELTA : -D1_FOR_25_DELTA;
+  const lnSK = d1 * iv * Math.sqrt(T) - (config.data.riskFreeRate + iv * iv / 2) * T;
+  return spot * Math.exp(-lnSK);
+}
+
 // `offset` shifts the test window into the past by that many bars — the
 // out-of-sample lever. Tuning happened against the recent window (offset 0);
 // a strategy that only wins there is curve-fit. Run with offset >= days to
 // validate on data the tuning never saw.
-export async function backtest({ symbols = config.universe, days = 750, offset = 0, startingEquity = config.account.startingEquity, regimeFilter = config.entries.marketRegimeFilter } = {}) {
+// strategy: 'long' buys calls/puts on the signal (needs Level 2).
+// 'credit' SELLS a 0.25-delta credit spread in the signal's direction
+// (bullish -> put credit spread below the market; needs Level 3). Credit mode
+// deliberately assumes ZERO variance risk premium (IV = realized vol) — real
+// markets price IV above realized vol on average, so live credits should be
+// richer than modeled. Pessimistic by construction.
+export async function backtest({ symbols = config.universe, days = 750, offset = 0, startingEquity = config.account.startingEquity, regimeFilter = config.entries.marketRegimeFilter, strategy = 'long' } = {}) {
   // preload history
   const histories = {};
   for (const s of symbols) {
@@ -95,7 +111,31 @@ export async function backtest({ symbols = config.universe, days = 750, offset =
 
       // ---- manage open position ----
       const pos = open.get(symbol);
-      if (pos) {
+      if (pos && pos.kind === 'credit') {
+        pos.dteLeft -= 1;
+        pos.heldDays += 1;
+        const hv = historicalVol(window.map((b) => b.close), 20) ?? pos.iv;
+        const iv = Math.max(hv, 0.10);
+        // cost to buy the spread back, with adverse slippage
+        const shortP = priceOption(pos.type, today.close, pos.shortK, pos.dteLeft, iv);
+        const wingP = priceOption(pos.type, today.close, pos.wingK, pos.dteLeft, iv);
+        const costToClose = Math.max((shortP - wingP) * (1 + SLIP) + HALF_SPREAD_FLOOR, 0);
+        const captured = pos.credit - costToClose;
+
+        let exit = null;
+        if (captured >= pos.credit * config.exits.profitTargetPct.creditSpread) exit = 'credit captured';
+        if (!exit && costToClose - pos.credit >= pos.credit * config.exits.stopLossPct.creditSpread) exit = 'credit stop';
+        if (!exit && pos.dteLeft * TRADING_TO_CAL <= config.exits.timeExitDTE) exit = 'time exit';
+        if (!exit && pos.heldDays >= config.exits.maxHoldDays) exit = 'max hold';
+        if (exit) {
+          // collateral back plus captured premium, minus 4 legs of fees round-trip
+          const proceeds = Math.max(pos.cost + captured * 100 * pos.contracts - 4 * FEE * pos.contracts, 0);
+          const pnl = +(proceeds - pos.cost).toFixed(2);
+          equity += proceeds;
+          closed.push({ symbol: pos.symbol, type: `${pos.type}_credit_spread`, entryDate: pos.entryDate, exitDate: today.date, pnl, reason: exit, heldDays: pos.heldDays });
+          open.delete(symbol);
+        }
+      } else if (pos) {
         pos.dteLeft -= 1;
         pos.heldDays += 1;
         const hv = historicalVol(window.map((b) => b.close), 20) ?? pos.iv;
@@ -135,29 +175,58 @@ export async function backtest({ symbols = config.universe, days = 750, offset =
         if (!sig || sig.direction === 'neutral' || sig.score < config.entries.minScore) continue;
         const regime = regimeAt(offset);
         if ((regime === 'down' && sig.direction === 'bullish') || (regime === 'up' && sig.direction === 'bearish')) continue;
-        const type = sig.direction === 'bullish' ? 'call' : 'put';
+        // correlated-exposure guard, mirroring the live validator (SPY+QQQ long = one bet twice)
+        const group = config.risk.correlatedGroups.find((g) => g.includes(symbol));
+        if (group && [...open.values()].some((p) => p.symbol !== symbol && group.includes(p.symbol) && p.direction === sig.direction)) continue;
+
         const iv = Math.max(sig.hv20, 0.10);
+        const budget = equity * tierFor(equity).riskPct;
+        const entryDte = ENTRY_DTE / TRADING_TO_CAL;
+
+        if (strategy === 'credit') {
+          // SELL a 0.25-delta spread in the signal's direction
+          const type = sig.direction === 'bullish' ? 'put' : 'call';
+          const shortK = strikeAt25Delta(type, today.close, entryDte, iv);
+          const width = Math.max(today.close * 0.05, 0.5);
+          const wingK = type === 'put' ? shortK - width : shortK + width;
+          const shortP = priceOption(type, today.close, shortK, entryDte, iv);
+          const wingP = priceOption(type, today.close, wingK, entryDte, iv);
+          const credit = (shortP - wingP) * (1 - SLIP) - HALF_SPREAD_FLOOR; // net received
+          if (credit < 0.03) continue;
+          const maxLossPer = (width - credit) * 100;
+          if (maxLossPer <= 0) continue;
+          const contracts = Math.floor(budget / maxLossPer);
+          if (contracts < 1 || maxLossPer * contracts > equity * config.risk.maxDeployedPct) continue;
+          const cost = maxLossPer * contracts; // collateral held
+          equity -= cost;
+          open.set(symbol, {
+            kind: 'credit', symbol, type, direction: sig.direction, shortK, wingK, width, credit, iv, contracts, cost,
+            entryDate: today.date, dteLeft: entryDte, heldDays: 0,
+          });
+          continue;
+        }
+
+        const type = sig.direction === 'bullish' ? 'call' : 'put';
         const strike = today.close; // ATM ~0.5 delta
-        const prem = priceOption(type, today.close, strike, ENTRY_DTE / TRADING_TO_CAL, iv);
+        const prem = priceOption(type, today.close, strike, entryDte, iv);
         if (prem < 0.05) continue;
         const entryPremium = prem * (1 + SLIP) + HALF_SPREAD_FLOOR;
         const costPer = entryPremium * 100 + FEE;
-        const budget = equity * tierFor(equity).riskPct;
         // full premium = planned risk (mirrors live sizing)
         const contracts = Math.floor(budget / costPer);
         if (contracts < 1 || costPer * contracts > equity * config.risk.maxDeployedPct) continue;
         const cost = costPer * contracts;
         equity -= cost;
         open.set(symbol, {
-          symbol, type, strike, iv, contracts, cost,
-          entryDate: today.date, dteLeft: ENTRY_DTE / TRADING_TO_CAL, heldDays: 0, peakPnl: 0,
+          kind: 'long', symbol, type, direction: sig.direction, strike, iv, contracts, cost,
+          entryDate: today.date, dteLeft: entryDte, heldDays: 0, peakPnl: 0,
         });
       }
     }
 
     // ---- equity curve / drawdown (marked at cost basis + cash) ----
     let openValue = 0;
-    for (const pos of open.values()) openValue += pos.cost + pos.peakPnl * 0; // conservative: cost basis
+    for (const pos of open.values()) openValue += pos.cost; // conservative: cost basis
     const eq = equity + openValue;
     peakEquity = Math.max(peakEquity, eq);
     maxDrawdown = Math.max(maxDrawdown, (peakEquity - eq) / peakEquity);
@@ -168,8 +237,19 @@ export async function backtest({ symbols = config.universe, days = 750, offset =
   for (const pos of [...open.values()]) {
     const bars = histories[pos.symbol];
     const last = bars[bars.length - 1];
-    const hv = historicalVol(bars.map((b) => b.close), 20) ?? pos.iv;
-    const prem = priceOption(pos.type, last.close, pos.strike, pos.dteLeft, Math.max(hv, 0.1));
+    const hv = Math.max(historicalVol(bars.map((b) => b.close), 20) ?? pos.iv, 0.1);
+    if (pos.kind === 'credit') {
+      const shortP = priceOption(pos.type, last.close, pos.shortK, pos.dteLeft, hv);
+      const wingP = priceOption(pos.type, last.close, pos.wingK, pos.dteLeft, hv);
+      const costToClose = Math.max((shortP - wingP) * (1 + SLIP) + HALF_SPREAD_FLOOR, 0);
+      const proceeds = Math.max(pos.cost + (pos.credit - costToClose) * 100 * pos.contracts - 4 * FEE * pos.contracts, 0);
+      const pnl = +(proceeds - pos.cost).toFixed(2);
+      equity += proceeds;
+      closed.push({ symbol: pos.symbol, type: `${pos.type}_credit_spread`, entryDate: pos.entryDate, exitDate: last.date, pnl, reason: 'end of backtest', heldDays: pos.heldDays });
+      open.delete(pos.symbol);
+      continue;
+    }
+    const prem = priceOption(pos.type, last.close, pos.strike, pos.dteLeft, hv);
     closePos(pos, prem, last.date, 'end of backtest');
   }
 
