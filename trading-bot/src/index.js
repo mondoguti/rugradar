@@ -178,9 +178,11 @@ async function cmdReport() {
 async function cmdBacktest() {
   const { backtest, CAVEATS } = await import('./backtest.js');
   const daysArg = args.find((a) => a.startsWith('--days='));
+  const offsetArg = args.find((a) => a.startsWith('--offset='));
   const days = daysArg ? parseInt(daysArg.split('=')[1], 10) : 750;
-  console.error(`Backtesting ${config.universe.length} symbols over ~${days} bars (signals + exits, long-only)...`);
-  const r = await backtest({ days });
+  const offset = offsetArg ? parseInt(offsetArg.split('=')[1], 10) : 0;
+  console.error(`Backtesting ${config.universe.length} symbols over ~${days} bars${offset ? ` ending ${offset} bars ago (OUT-OF-SAMPLE window)` : ' (recent window — the one the strategy was tuned on)'}...`);
+  const r = await backtest({ days, offset });
   if (asJson) { out(r, ''); return; }
   const { closed, ...stats } = r;
   console.log(`\nSymbols with data: ${stats.symbols.join(', ')}`);

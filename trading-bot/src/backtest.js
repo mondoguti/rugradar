@@ -24,12 +24,17 @@ function priceOption(type, spot, strike, tradingDteLeft, iv) {
   return bsPrice({ type, spot, strike, dte, iv, r: config.data.riskFreeRate }) ?? 0;
 }
 
-export async function backtest({ symbols = config.universe, days = 750, startingEquity = config.account.startingEquity } = {}) {
+// `offset` shifts the test window into the past by that many bars — the
+// out-of-sample lever. Tuning happened against the recent window (offset 0);
+// a strategy that only wins there is curve-fit. Run with offset >= days to
+// validate on data the tuning never saw.
+export async function backtest({ symbols = config.universe, days = 750, offset = 0, startingEquity = config.account.startingEquity } = {}) {
   // preload history
   const histories = {};
   for (const s of symbols) {
     try {
-      const bars = await getDailyHistory(s, days);
+      const raw = await getDailyHistory(s, days + offset);
+      const bars = offset ? raw.slice(0, -offset) : raw;
       if (bars.length >= 80) histories[s] = bars;
     } catch { /* symbol unavailable — skip */ }
   }
