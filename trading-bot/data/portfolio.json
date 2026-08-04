@@ -31,15 +31,15 @@
       "maxGain": null,
       "dteAtOpen": 46,
       "thesis": "uptrend, EMA separation 0.50 ATR, slope confirmed; RSI 55",
-      "currentValue": 29,
-      "unrealizedPnl": -14.25,
-      "exitValue": 28.75,
+      "currentValue": 36.5,
+      "unrealizedPnl": -6.75,
+      "exitValue": 36.12,
       "peakPnl": 0,
       "markStale": false,
       "thesisBroken": false,
       "thesisNote": null,
       "dte": 45,
-      "markedAt": "2026-08-04T14:51:26.079Z"
+      "markedAt": "2026-08-04T19:45:45.710Z"
     }
   ],
   "closed": [],
