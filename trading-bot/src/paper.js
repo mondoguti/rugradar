@@ -37,6 +37,8 @@ export function executeTicketPaper(ticket, portfolio) {
     symbol: ticket.symbol,
     structure: ticket.structure,
     direction: ticket.direction,
+    score: ticket.score,               // recorded so the trade log can answer:
+    ivRegime: ticket.ivRegime,         // "do high-score / cheap-IV trades win more?"
     legs: ticket.legs,
     openedAt: new Date().toISOString(),
     entryValue,                        // debit paid (or collateral for credit)
