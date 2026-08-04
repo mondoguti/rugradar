@@ -61,6 +61,9 @@ function buildLong(signal, riskBudget) {
   const atExpiry = pool.filter((c) => c.expiry === expiry);
   const leg = byDeltaTarget(atExpiry, config.entries.delta.longEntry);
   if (!leg) return null;
+  // Delta floor: if the only liquid contracts left are far OTM, that's not a
+  // trade, it's a lottery ticket. A 0.07Δ call needs a huge move to ever pay.
+  if (Math.abs(leg.delta) < config.entries.delta.longMin) return null;
 
   const costPerContract = leg.mid * 100;
   // For a long option the debit IS the max loss, but our stop cuts it at
@@ -94,6 +97,9 @@ function buildVertical(signal, riskBudget, kind) {
   const nearTarget = kind === 'debit' ? config.entries.delta.debitBuy : config.entries.delta.creditSell;
   const near = byDeltaTarget(atExpiry, nearTarget);
   if (!near) return null;
+  // If the closest liquid strike is nowhere near the target delta, the chain
+  // is too thin (or quotes are degraded) to build this structure honestly.
+  if (Math.abs(Math.abs(near.delta) - nearTarget) > config.entries.delta.nearTolerance) return null;
 
   // Far leg sits further out-of-the-money than the near leg (calls: higher
   // strike, puts: lower), within maxSpreadWidth. In both structures we
@@ -161,11 +167,26 @@ function buildVertical(signal, riskBudget, kind) {
   };
 }
 
+// Quote-quality check: when the market is closed (or the feed is degraded),
+// most tradeable-delta contracts show empty bids. Building tickets from the
+// few weird survivors produces garbage — refuse instead.
+function chainUsable(chain) {
+  const relevant = chain.contracts.filter(
+    (c) => c.dte >= 15 && c.dte <= 70 && c.delta != null &&
+      Math.abs(c.delta) >= 0.25 && Math.abs(c.delta) <= 0.75
+  );
+  if (relevant.length < 6) return false;
+  const quoted = relevant.filter((c) => c.bid > 0 && c.mid != null);
+  return quoted.length / relevant.length >= 0.5;
+}
+
 // Main entry: turn a scanner signal into the best available ticket, or a
 // {skipped, reason} record when discipline says stand aside.
 export function buildTicket(signal, riskBudget) {
   if (!signal.chain) return { skipped: true, symbol: signal.symbol, reason: 'no chain data' };
   if (signal.direction === 'neutral') return { skipped: true, symbol: signal.symbol, reason: 'no directional edge' };
+  if (!chainUsable(signal.chain))
+    return { skipped: true, symbol: signal.symbol, reason: 'options quotes degraded (market closed?) — rescan 9:45am-4pm ET' };
 
   const spreadsOk = config.approvals.canTradeSpreads;
 

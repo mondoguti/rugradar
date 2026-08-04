@@ -55,9 +55,11 @@ export default {
     },
     delta: {                    // strike selection targets (absolute delta)
       longEntry: 0.55,
+      longMin: 0.35,            // NEVER buy below this — far-OTM "cheap" options are lottery tickets
       debitBuy: 0.55,
       debitSell: 0.30,
       creditSell: 0.25,
+      nearTolerance: 0.15,      // reject if best liquid strike is further than this from target
     },
     maxSpreadWidth: 5,          // max $ width between spread strikes
     minCreditFractionOfWidth: 0.25, // credit spreads must collect >=25% of width or skip
