@@ -212,6 +212,7 @@ export async function backtest({ symbols = config.universe, days = 750, offset =
         if (prem < 0.05) continue;
         const entryPremium = prem * (1 + SLIP) + HALF_SPREAD_FLOOR;
         const costPer = entryPremium * 100 + FEE;
+        if (config.entries.maxPremiumPerContract && costPer > config.entries.maxPremiumPerContract) continue;
         // full premium = planned risk (mirrors live sizing)
         const contracts = Math.floor(budget / costPer);
         if (contracts < 1 || costPer * contracts > equity * config.risk.maxDeployedPct) continue;

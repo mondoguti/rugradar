@@ -75,6 +75,11 @@ export default {
       creditSell: 0.25,
       nearTolerance: 0.15,      // reject if best liquid strike is further than this from target
     },
+    // Cheap-contract discipline: cap the premium per contract and buy
+    // multiples instead of one expensive ATM option. The $500-era budget
+    // enforced this by accident and coincided with the only positive windows;
+    // the $2k backtest without it collapsed (PF 0.51). Null disables.
+    maxPremiumPerContract: 50,
     maxSpreadWidth: 5,          // max $ width between spread strikes
     minCreditFractionOfWidth: 0.25, // credit spreads must collect >=25% of width or skip
     liquidity: {
