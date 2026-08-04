@@ -205,6 +205,21 @@ async function cmdBacktest() {
   for (const c of CAVEATS) console.log(`  - ${c}`);
 }
 
+// One-shot daily cycle for scheduled runs: manage exits first (frees slots),
+// then scan for new setups, then paper-execute whatever passed every gate.
+// PAPER ONLY by design — live orders always go through human confirmation.
+async function cmdAutopilot() {
+  console.log(`\n=== autopilot run ${new Date().toISOString()} ===`);
+  console.log('--- manage open positions ---');
+  await cmdManage();
+  console.log('--- scan for setups ---');
+  await cmdScan();
+  console.log('--- paper-execute passing tickets ---');
+  await cmdPaperBuy();
+  console.log('--- portfolio after run ---');
+  await cmdStatus();
+}
+
 async function cmdReset() {
   if (!args.includes('--confirm')) { console.log('This wipes the paper portfolio. Re-run with --confirm.'); return; }
   const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -215,7 +230,7 @@ async function cmdReset() {
   console.log('Paper portfolio reset.');
 }
 
-const commands = { scan: cmdScan, tickets: cmdTickets, 'paper-buy': cmdPaperBuy, manage: cmdManage, status: cmdStatus, report: cmdReport, backtest: cmdBacktest, reset: cmdReset };
+const commands = { scan: cmdScan, tickets: cmdTickets, 'paper-buy': cmdPaperBuy, manage: cmdManage, status: cmdStatus, report: cmdReport, backtest: cmdBacktest, autopilot: cmdAutopilot, reset: cmdReset };
 const fn = commands[cmd];
 if (!fn) {
   console.error(`Unknown command: ${cmd}\nCommands: ${Object.keys(commands).join(', ')}`);
