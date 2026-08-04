@@ -15,6 +15,16 @@ export default {
     'SOFI', 'F', 'BAC', 'T', 'AAL', 'RIVN', 'MARA',
   ],
 
+  // Dynamic discovery: each scan also pulls trending / most-active / top-gainer
+  // tickers and runs them through the SAME signal and risk gates as the static
+  // list. Widens the funnel; never lowers the bar.
+  discovery: {
+    enabled: true,
+    max: 10,                    // at most this many discovered names per scan
+    maxTotal: 25,               // hard cap on total universe size
+    priceRange: [3, 300],       // skip junk (<$3) and unaffordable (>$300) movers
+  },
+
   risk: {
     // Graduated sizing — the rinse-and-repeat schedule. As equity compounds,
     // dollars risked per trade (and therefore contract counts) grow

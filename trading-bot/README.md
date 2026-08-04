@@ -41,6 +41,15 @@ confirming every order.
 
 ## How it decides
 
+0. **Universe** (`src/universe.js`) — the curated static list PLUS up to 10
+   dynamically discovered movers per scan (trending tickers, most actives, top
+   gainers, filtered to $3–$300). Hot names get found automatically — and then
+   have to survive the exact same gates as everything else.
+   **Earnings guard** (`src/earnings.js`): any ticket whose expiry spans a
+   known earnings date is skipped outright. Buying options into an earnings
+   print means paying peak IV for a move everyone expects — the post-print IV
+   collapse loses money even when the direction was right. The bot trades hot
+   stocks' *trends*; it does not gamble their announcements.
 1. **Signal** (`src/scanner.js`) — daily bars → trend (EMA20/EMA50), momentum
    (RSI), pullback quality (distance from EMA20 in ATRs), dollar-volume
    liquidity. Produces direction + 0–100 score. Score ≥ 60 required.

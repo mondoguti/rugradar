@@ -16,6 +16,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import config from '../config.js';
 import { scanUniverse } from './scanner.js';
+import { discoverUniverse } from './universe.js';
+import { earningsCheck } from './earnings.js';
 import { buildTicket } from './strategies.js';
 import { riskBudget, validateTicket, dayTradesInWindow, tierFor } from './risk.js';
 import { loadPortfolio, savePortfolio, loadTickets, saveTickets, equity } from './portfolio.js';
@@ -31,9 +33,10 @@ const out = (obj, human) => console.log(asJson ? JSON.stringify(obj, null, 2) : 
 async function cmdScan() {
   const portfolio = loadPortfolio();
   const budget = riskBudget(portfolio);
-  console.error(`Scanning ${config.universe.length} symbols (risk budget $${budget.toFixed(2)}/trade)...`);
+  const { universe, note } = await discoverUniverse();
+  console.error(`Scanning ${universe.length} symbols (risk budget $${budget.toFixed(2)}/trade) — ${note}`);
 
-  const { results, errors } = await scanUniverse();
+  const { results, errors } = await scanUniverse(universe);
   for (const e of errors) console.error(`  ! ${e.symbol}: ${e.error}`);
 
   const candidates = results.filter((s) => s.direction !== 'neutral' && s.score >= config.entries.minScore);
@@ -45,7 +48,13 @@ async function cmdScan() {
     if (t.skipped) { skips.push(t); continue; }
     const v = validateTicket(t, portfolio);
     t.validation = v;
-    if (v.ok) tickets.push(t); else skips.push({ skipped: true, symbol: t.symbol, reason: v.failures.join('; ') });
+    if (!v.ok) { skips.push({ skipped: true, symbol: t.symbol, reason: v.failures.join('; ') }); continue; }
+    // Never hold long premium through an earnings print.
+    const e = await earningsCheck(t);
+    t.earningsDate = e.date;
+    if (e.block) { skips.push({ skipped: true, symbol: t.symbol, reason: e.reason }); continue; }
+    if (e.warning) v.warnings.push(e.warning);
+    tickets.push(t);
   }
   saveTickets(tickets);
 
@@ -68,6 +77,7 @@ async function cmdScan() {
     }
     console.log(`   cost ${fmtMoney(t.netDebit ?? -t.netCredit)}  max loss ${fmtMoney(t.maxLoss)}  max gain ${t.maxGain ? fmtMoney(t.maxGain) : 'uncapped'}${t.breakeven ? `  breakeven $${t.breakeven}` : ''}`);
     console.log(`   thesis: ${t.thesis}`);
+    if (t.earningsDate) console.log(`   earnings: ${t.earningsDate} (after expiry — clear)`);
     for (const w of t.validation.warnings) console.log(`   ⚠ ${w}`);
   }
   if (!tickets.length) console.log('  (none — nothing met the bar today. Not trading IS a position.)');
