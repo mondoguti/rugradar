@@ -127,10 +127,13 @@ export default {
   },
 
   // Robinhood options approval levels: Level 2 = long calls/puts only.
-  // Level 3 adds spreads. Flip this to true ONLY after Robinhood approves you
-  // for spreads, otherwise credit/debit spread tickets are useless.
+  // Level 3 adds spreads. User reports Level 3 approval (2026-08) — spreads
+  // enabled so the paper record tests the full strategy, including selling
+  // rich premium via defined-risk credit spreads (the variance-risk-premium
+  // wing the research supports). Verify the AGENTIC account carries Level 3
+  // before any live spread order.
   approvals: {
-    canTradeSpreads: false,
+    canTradeSpreads: true,
   },
 
   data: {
