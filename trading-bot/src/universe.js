@@ -46,16 +46,18 @@ export async function discoverUniverse() {
     return { universe: base, discovered: [], note: useFixtures() ? 'fixtures mode: discovery off' : 'discovery disabled' };
   }
 
-  const [trending, actives, gainers] = await Promise.all([
+  const [trending, actives, gainers, losers, smallCaps] = await Promise.all([
     fetchTrending(),
     fetchScreener('most_actives'),
     fetchScreener('day_gainers'),
+    fetchScreener('day_losers'),        // crashes are tradeable too — puts on downtrends
+    fetchScreener('small_cap_gainers'), // the "up and coming" names before they're famous
   ]);
 
   const seen = new Set(base);
   const discovered = [];
   // interleave sources so one noisy list doesn't dominate
-  const sources = [actives, gainers, trending];
+  const sources = [actives, gainers, losers, smallCaps, trending];
   for (let i = 0; discovered.length < config.discovery.max; i++) {
     const src = sources[i % sources.length];
     const idx = Math.floor(i / sources.length);
