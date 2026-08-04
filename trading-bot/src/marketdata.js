@@ -63,9 +63,10 @@ async function historyFromStooq(symbol) {
   });
 }
 
-async function historyFromYahoo(symbol) {
+async function historyFromYahoo(symbol, days) {
+  const range = days > 400 ? '5y' : days > 200 ? '2y' : '1y';
   const j = await fetchJson(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=1y&interval=1d`
+    `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=1d`
   );
   const r = j?.chart?.result?.[0];
   if (!r) throw new Error(`yahoo chart: no result for ${symbol}`);
@@ -82,22 +83,22 @@ async function historyFromYahoo(symbol) {
   return out;
 }
 
-export async function getDailyHistory(symbol) {
+export async function getDailyHistory(symbol, days = config.data.historyDays) {
   if (useFixtures()) {
     const f = path.join(FIXTURES_DIR, `${symbol}.history.json`);
     if (!fs.existsSync(f)) throw new Error(`no fixture history for ${symbol} — run: node trading-bot/fixtures/generate.js`);
-    return JSON.parse(fs.readFileSync(f, 'utf8'));
+    return JSON.parse(fs.readFileSync(f, 'utf8')).slice(-days);
   }
-  const cached = cacheGet(`hist-${symbol}`);
+  const cached = cacheGet(`hist-${symbol}-${days}`);
   if (cached) return cached;
   let bars;
   try {
     bars = await historyFromStooq(symbol);
   } catch {
-    bars = await historyFromYahoo(symbol);
+    bars = await historyFromYahoo(symbol, days);
   }
-  bars = bars.slice(-config.data.historyDays);
-  cacheSet(`hist-${symbol}`, bars);
+  bars = bars.slice(-days);
+  cacheSet(`hist-${symbol}-${days}`, bars);
   return bars;
 }
 

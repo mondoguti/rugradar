@@ -94,6 +94,8 @@ export async function markPosition(pos) {
     pos.exitValue = +exitValue.toFixed(2);
     pos.unrealizedPnl = +(value - pos.entryValue).toFixed(2);
   }
+  // track the high-water mark for the trailing stop
+  if (!stale) pos.peakPnl = Math.max(pos.peakPnl ?? 0, pos.unrealizedPnl);
   pos.markStale = stale;
   pos.dte = Math.min(...pos.legs.map((l) => Math.max(0, Math.round((new Date(`${l.expiry}T21:00:00Z`) - Date.now()) / 86400000))));
   pos.markedAt = new Date().toISOString();
@@ -122,8 +124,15 @@ export function exitDecision(pos) {
   } else {
     const pnlPct = pos.unrealizedPnl / pos.entryValue;
     const gainDenom = pos.maxGain ?? pos.entryValue; // spreads target % of max profit
+    const trail = config.exits.trailing;
     if (pos.structure.includes('spread')) {
       if (pos.unrealizedPnl >= gainDenom * target) return { action: 'close', reason: `profit target: +$${pos.unrealizedPnl} (${(target * 100)}% of max gain)` };
+    } else if (trail.enabled) {
+      // trailing mode: no fixed profit cap — arm at +armAtPct, close on giveback
+      const peakPct = (pos.peakPnl ?? 0) / pos.entryValue;
+      if (peakPct >= trail.armAtPct && pos.unrealizedPnl <= pos.peakPnl * (1 - trail.giveBackPct)) {
+        return { action: 'close', reason: `trailing stop: peaked +${(peakPct * 100).toFixed(0)}%, gave back ${(trail.giveBackPct * 100)}% of peak` };
+      }
     } else if (pnlPct >= target) {
       return { action: 'close', reason: `profit target hit: +${(pnlPct * 100).toFixed(0)}%` };
     }

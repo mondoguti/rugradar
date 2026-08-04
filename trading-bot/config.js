@@ -85,9 +85,18 @@ export default {
   },
 
   exits: {
+    // Let winners RUN: when a long/debit position reaches armAtPct, instead of
+    // taking profit it arms a trailing stop — the trade stays on as long as
+    // the move continues, and closes only after giving back giveBackPct of its
+    // peak gain. Asymmetric exits are where outsized winners come from.
+    trailing: {
+      enabled: true,
+      armAtPct: 0.60,           // arm the trail at +60% on the position
+      giveBackPct: 0.35,        // close after retracing 35% from peak P&L
+    },
     profitTargetPct: {
-      long: 0.75,               // close long options at +75%
-      debitSpread: 0.60,        // close debit spreads at +60% of max profit potential
+      long: 0.75,               // fixed target used only when trailing is disabled
+      debitSpread: 0.60,        // spreads have capped max gain — fixed targets stay
       creditSpread: 0.50,       // buy back credit spreads at 50% of credit captured
     },
     stopLossPct: {

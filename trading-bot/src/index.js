@@ -175,6 +175,24 @@ async function cmdReport() {
   if (p.closedTrades < 20) console.log(`\nNote: ${p.closedTrades} trades is not statistical evidence. 20+ paper trades minimum before judging the system — or going live.`);
 }
 
+async function cmdBacktest() {
+  const { backtest, CAVEATS } = await import('./backtest.js');
+  const daysArg = args.find((a) => a.startsWith('--days='));
+  const days = daysArg ? parseInt(daysArg.split('=')[1], 10) : 750;
+  console.error(`Backtesting ${config.universe.length} symbols over ~${days} bars (signals + exits, long-only)...`);
+  const r = await backtest({ days });
+  if (asJson) { out(r, ''); return; }
+  const { closed, ...stats } = r;
+  console.log(`\nSymbols with data: ${stats.symbols.join(', ')}`);
+  console.log(`Period:            ${stats.tradingDays} trading days (~${(stats.tradingDays / 252).toFixed(1)}y)`);
+  console.log(`Equity:            ${fmtMoney(stats.startingEquity)} -> ${fmtMoney(stats.finalEquity)}  (${stats.totalReturnPct >= 0 ? '+' : ''}${stats.totalReturnPct}%, CAGR ${stats.cagrPct}%)`);
+  console.log(`Max drawdown:      ${stats.maxDrawdownPct}%`);
+  console.log(`Trades:            ${stats.trades}  win rate ${stats.winRate ?? '—'}%  avg win ${fmtMoney(stats.avgWin)}  avg loss ${fmtMoney(stats.avgLoss)}  PF ${stats.profitFactor ?? '—'}`);
+  console.log(`Exits:             ${Object.entries(stats.exitBreakdown).map(([k, v]) => `${k} x${v}`).join(', ') || '—'}`);
+  console.log('\nCaveats:');
+  for (const c of CAVEATS) console.log(`  - ${c}`);
+}
+
 async function cmdReset() {
   if (!args.includes('--confirm')) { console.log('This wipes the paper portfolio. Re-run with --confirm.'); return; }
   const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -185,7 +203,7 @@ async function cmdReset() {
   console.log('Paper portfolio reset.');
 }
 
-const commands = { scan: cmdScan, tickets: cmdTickets, 'paper-buy': cmdPaperBuy, manage: cmdManage, status: cmdStatus, report: cmdReport, reset: cmdReset };
+const commands = { scan: cmdScan, tickets: cmdTickets, 'paper-buy': cmdPaperBuy, manage: cmdManage, status: cmdStatus, report: cmdReport, backtest: cmdBacktest, reset: cmdReset };
 const fn = commands[cmd];
 if (!fn) {
   console.error(`Unknown command: ${cmd}\nCommands: ${Object.keys(commands).join(', ')}`);
