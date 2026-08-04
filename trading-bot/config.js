@@ -13,6 +13,9 @@ export default {
     'SPY', 'QQQ', 'IWM',
     'AAPL', 'AMD', 'INTC', 'PLTR', 'HOOD',
     'SOFI', 'F', 'BAC', 'T', 'AAL', 'RIVN', 'MARA',
+    // liquid perennials — some too pricey for $50 long options today, but they
+    // feed the IV journal and become tradeable with spreads / a bigger account
+    'NVDA', 'TSLA', 'GM', 'PFE', 'WMT', 'KO', 'SNAP', 'UBER', 'CCL', 'DKNG',
   ],
 
   // Dynamic discovery: each scan also pulls trending / most-active / top-gainer
@@ -20,8 +23,8 @@ export default {
   // list. Widens the funnel; never lowers the bar.
   discovery: {
     enabled: true,
-    max: 10,                    // at most this many discovered names per scan
-    maxTotal: 25,               // hard cap on total universe size
+    max: 15,                    // at most this many discovered names per scan
+    maxTotal: 40,               // hard cap on total universe size
     priceRange: [3, 300],       // skip junk (<$3) and unaffordable (>$300) movers
   },
 
