@@ -82,9 +82,12 @@ export default {
       rich: 1.25,               // above this: premium is expensive -> sell it (spreads) or stand aside
       cheap: 0.90,              // below this: premium is cheap -> buying is acceptable
     },
-    // Don't fight the tape: no bullish entries while SPY is in a confirmed
-    // downtrend, no bearish entries while it's in a confirmed uptrend.
-    marketRegimeFilter: true,
+    // SPY regime filter — OFF by default. The 2x2 test (2026-08) showed it
+    // helping the tuned window while inverting the out-of-sample one
+    // (PF 0.54, -14.2%), the classic overfit signature. Per the
+    // pre-registered rule (must hold on BOTH windows) it stays disabled
+    // until new evidence clears it.
+    marketRegimeFilter: false,
   },
 
   exits: {
