@@ -18,3 +18,6 @@
 {"date":"2026-08-04","symbol":"KNF","close":78.84,"hv20":0.483,"atmIV":0.656,"ivOverHv":1.358}
 {"date":"2026-08-04","symbol":"INTC","close":91,"hv20":0.8342,"atmIV":0.8589,"ivOverHv":1.03}
 {"date":"2026-08-04","symbol":"QQQ","close":700.07,"hv20":0.2409,"atmIV":0.2278,"ivOverHv":0.945}
+{"date":"2026-08-04","symbol":"AMD","close":121.58,"hv20":0.3272,"atmIV":0.3493,"ivOverHv":1.068}
+{"date":"2026-08-04","symbol":"HOOD","close":68.42,"hv20":0.4459,"atmIV":0.6058,"ivOverHv":1.359}
+{"date":"2026-08-04","symbol":"BAC","close":37.69,"hv20":0.1556,"atmIV":0.1612,"ivOverHv":1.036}

@@ -67,7 +67,8 @@ function buildLong(signal, riskBudget) {
   const { longEntry, longMin } = config.entries.delta;
   const ladder = atExpiry
     .filter((c) => liquid(c) && c.delta != null &&
-      Math.abs(c.delta) >= longMin && Math.abs(c.delta) <= longEntry + 0.10)
+      Math.abs(c.delta) >= longMin && Math.abs(c.delta) <= longEntry + 0.10 &&
+      (!config.entries.maxPremiumPerContract || c.mid * 100 <= config.entries.maxPremiumPerContract))
     .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
 
   let leg = null, contracts = 0;
