@@ -281,4 +281,5 @@ export const CAVEATS = [
   'Option prices are Black-Scholes approximations from realized vol — real IV, spreads, and gaps will differ.',
   'No earnings-date awareness in the backtest (live scans have the guard).',
   'A losing backtest means the logic is broken; a winning one still must prove out in paper trading.',
+  'CREDIT MODE measures COST DRAG ONLY: with IV=HV the simulator prices premium "fairly", so selling it has zero edge by construction. The real-world case for credit spreads is the variance risk premium, which this model cannot see. Use credit mode to size friction, not to judge the strategy.',
 ];
