@@ -1,8 +1,9 @@
 {
   "createdAt": "2026-08-05T03:07:09.300Z",
   "startingEquity": 2000,
-  "cash": 1857.5,
-  "positions": [
+  "cash": 2005,
+  "positions": [],
+  "closed": [
     {
       "id": "ea62f8e7",
       "mode": "paper",
@@ -33,10 +34,19 @@
       "maxGain": null,
       "dteAtOpen": 45,
       "thesis": "downtrend, EMA separation 1.96 ATR, slope confirmed; RSI 40",
-      "currentValue": 142.5,
-      "unrealizedPnl": 0
+      "currentValue": 150,
+      "unrealizedPnl": 7.5,
+      "exitValue": 147.5,
+      "peakPnl": 7.5,
+      "markStale": false,
+      "thesisBroken": true,
+      "thesisNote": "underlying 3.15 closed above EMA20 + 0.5 ATR (3.12)",
+      "dte": 44,
+      "markedAt": "2026-08-05T14:51:19.507Z",
+      "closedAt": "2026-08-05T14:51:19.542Z",
+      "closeReason": "thesis broken: underlying 3.15 closed above EMA20 + 0.5 ATR (3.12)",
+      "realizedPnl": 5
     }
   ],
-  "closed": [],
   "dayTrades": []
 }
