@@ -1,0 +1,42 @@
+{
+  "createdAt": "2026-08-05T03:07:09.300Z",
+  "startingEquity": 2000,
+  "cash": 1857.5,
+  "positions": [
+    {
+      "id": "ea62f8e7",
+      "mode": "paper",
+      "symbol": "BBAI",
+      "structure": "long_put",
+      "direction": "bearish",
+      "score": 85,
+      "ivRegime": "normal",
+      "legs": [
+        {
+          "action": "buy",
+          "type": "put",
+          "expiry": "2026-09-18",
+          "strike": 3,
+          "contracts": 5,
+          "mid": 0.28,
+          "bid": 0.26,
+          "ask": 0.3,
+          "delta": -0.37,
+          "iv": 0.8327,
+          "openInterest": 6223
+        }
+      ],
+      "openedAt": "2026-08-05T03:07:09.314Z",
+      "entryValue": 142.5,
+      "entryCredit": null,
+      "maxLoss": 140,
+      "maxGain": null,
+      "dteAtOpen": 45,
+      "thesis": "downtrend, EMA separation 1.96 ATR, slope confirmed; RSI 40",
+      "currentValue": 142.5,
+      "unrealizedPnl": 0
+    }
+  ],
+  "closed": [],
+  "dayTrades": []
+}

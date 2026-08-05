@@ -1,0 +1,97 @@
+[
+  {
+    "id": "ea62f8e7",
+    "createdAt": "2026-08-05T03:04:47.901Z",
+    "symbol": "BBAI",
+    "spot": 2.86,
+    "direction": "bearish",
+    "score": 85,
+    "ivRegime": "normal",
+    "structure": "long_put",
+    "status": "executed_paper",
+    "thesis": "downtrend, EMA separation 1.96 ATR, slope confirmed; RSI 40",
+    "legs": [
+      {
+        "action": "buy",
+        "type": "put",
+        "expiry": "2026-09-18",
+        "strike": 3,
+        "contracts": 5,
+        "mid": 0.28,
+        "bid": 0.26,
+        "ask": 0.3,
+        "delta": -0.37,
+        "iv": 0.8327,
+        "openInterest": 6223
+      }
+    ],
+    "netDebit": 140,
+    "maxLoss": 140,
+    "plannedRisk": 140,
+    "maxGain": null,
+    "breakeven": 2.72,
+    "dte": 45,
+    "validation": {
+      "ok": true,
+      "failures": [],
+      "warnings": [
+        "earnings verified manually 2026-08-04 via Robinhood: reported 2026-07-30, next 2026-11-09 (after expiry) — clear"
+      ]
+    },
+    "earningsDate": "2026-11-09"
+  },
+  {
+    "id": "41cb5832",
+    "createdAt": "2026-08-05T03:04:48.193Z",
+    "symbol": "TE",
+    "spot": 4.94,
+    "direction": "bearish",
+    "score": 75,
+    "ivRegime": "normal",
+    "structure": "put_debit_spread",
+    "status": "skipped_earnings",
+    "thesis": "downtrend, EMA separation 1.33 ATR, slope confirmed; RSI 39",
+    "legs": [
+      {
+        "action": "buy",
+        "type": "put",
+        "expiry": "2026-08-28",
+        "strike": 6.5,
+        "contracts": 1,
+        "mid": 1.675,
+        "bid": 1.6,
+        "ask": 1.75,
+        "delta": -0.5732,
+        "iv": 1.7388,
+        "openInterest": 133
+      },
+      {
+        "action": "sell",
+        "type": "put",
+        "expiry": "2026-08-28",
+        "strike": 4.5,
+        "contracts": 1,
+        "mid": 0.475,
+        "bid": 0.45,
+        "ask": 0.5,
+        "delta": -0.2587,
+        "iv": 1.7079,
+        "openInterest": 248
+      }
+    ],
+    "width": 2,
+    "netDebit": 120,
+    "maxLoss": 120,
+    "plannedRisk": 120,
+    "maxGain": 80,
+    "dte": 24,
+    "validation": {
+      "ok": true,
+      "failures": [],
+      "warnings": [
+        "BLOCKED: earnings 2026-08-19 (tentative, verified 2026-08-04 via Robinhood) falls before 2026-08-28 expiry — no long premium through earnings"
+      ]
+    },
+    "earningsDate": "2026-08-19"
+  }
+]
