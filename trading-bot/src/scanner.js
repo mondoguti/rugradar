@@ -8,7 +8,7 @@ import config from '../config.js';
 
 // ATM implied volatility: average IV of the call+put nearest the spot price
 // in the nearest monthly-ish expiry (21-45 DTE preferred).
-function atmIV(chain) {
+export function atmIV(chain) {
   const candidates = chain.contracts.filter((c) => c.iv > 0 && c.dte >= 15 && c.dte <= 60);
   if (!candidates.length) return null;
   const targetDte = candidates.reduce(

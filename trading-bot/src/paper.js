@@ -30,6 +30,9 @@ export function executeTicketPaper(ticket, portfolio) {
     }, 0);
     entryValue = +entryValue.toFixed(2);
   }
+  // execution-quality ledger: what the slippage assumption cost on this fill
+  const midValue = ticket.legs.reduce((a, leg) => a + (leg.action === 'buy' ? leg.mid : -leg.mid) * leg.contracts * 100, 0);
+  const entrySlippageCost = isCredit ? null : +(entryValue - midValue).toFixed(2);
 
   const position = {
     id: ticket.id,
@@ -47,6 +50,8 @@ export function executeTicketPaper(ticket, portfolio) {
     maxGain: ticket.maxGain,
     dteAtOpen: ticket.dte,
     thesis: ticket.thesis,
+    spot: ticket.spot,
+    entrySlippageCost,
     currentValue: entryValue,
     unrealizedPnl: 0,
   };
@@ -85,21 +90,29 @@ export async function markPosition(pos) {
     exitValue += (leg.action === 'buy' ? closePx : -closePx) * leg.contracts * 100;
   }
   const isCredit = pos.entryCredit != null;
-  if (isCredit) {
-    // value is negative-ish: cost to close the short structure
-    const costToClose = -value;
-    pos.costToClose = +costToClose.toFixed(2);
-    pos.costToCloseSlipped = +(-exitValue).toFixed(2);
-    pos.currentValue = +(pos.entryValue + pos.entryCredit - costToClose).toFixed(2); // collateral + captured premium
-    pos.unrealizedPnl = +(pos.entryCredit - costToClose).toFixed(2);
-  } else {
-    pos.currentValue = +value.toFixed(2);
-    pos.exitValue = +exitValue.toFixed(2);
-    pos.unrealizedPnl = +(value - pos.entryValue).toFixed(2);
+  // A stale mark (any leg unquoted) must never overwrite the position's
+  // numbers: a partial sum looks like a real price and poisons equity(),
+  // sizing, and — worst — close fills. Keep the last good mark; only the
+  // data-free fields (dte, thesis, staleness) update below.
+  if (!stale) {
+    if (isCredit) {
+      // value is negative-ish: cost to close the short structure
+      const costToClose = -value;
+      pos.costToClose = +costToClose.toFixed(2);
+      pos.costToCloseSlipped = +(-exitValue).toFixed(2);
+      pos.currentValue = +(pos.entryValue + pos.entryCredit - costToClose).toFixed(2); // collateral + captured premium
+      pos.unrealizedPnl = +(pos.entryCredit - costToClose).toFixed(2);
+    } else {
+      pos.currentValue = +value.toFixed(2);
+      pos.exitValue = +exitValue.toFixed(2);
+      pos.unrealizedPnl = +(value - pos.entryValue).toFixed(2);
+    }
+    // track the high-water mark for the trailing stop
+    pos.peakPnl = Math.max(pos.peakPnl ?? 0, pos.unrealizedPnl);
+    pos.markFailures = 0;
   }
-  // track the high-water mark for the trailing stop
-  if (!stale) pos.peakPnl = Math.max(pos.peakPnl ?? 0, pos.unrealizedPnl);
   pos.markStale = stale;
+  pos.spotAtMark = chain.spot ?? pos.spotAtMark;
 
   // Thesis check for long options: has the underlying broken the setup?
   // (Exits live on the chart, not on option-price noise.)
@@ -131,11 +144,12 @@ export function exitDecision(pos) {
   const target = config.exits.profitTargetPct[kind];
   const stop = config.exits.stopLossPct[kind]; // undefined for 'long' — handled below
 
-  // A stale mark (missing leg quote) must never drive a P&L-based exit —
-  // only time-based rules below apply until quotes come back.
+  // A stale mark (missing leg quote) must never drive ANY executed exit —
+  // there is no honest price to fill at. Time-due exits get FLAGGED (visible,
+  // never auto-executed); the next non-stale run fills them at real prices.
   if (pos.markStale) {
     if (pos.dte != null && pos.dte <= config.exits.timeExitDTE)
-      return { action: 'close', reason: `time exit on stale mark: ${pos.dte} DTE — verify price manually before closing` };
+      return { action: 'flag', reason: `time exit due but mark is stale (quotes missing) — will close on next run with live quotes` };
     return { action: 'hold', reason: 'mark is stale (missing leg quote) — no P&L decision possible' };
   }
 
@@ -180,19 +194,30 @@ export function closePositionPaper(pos, portfolio, reason) {
   const isCredit = pos.entryCredit != null;
   const openedToday = etDay(pos.openedAt) === etDay();
 
+  // Never fill a paper close from a stale or absent mark — a partial-quote
+  // "price" is fiction, and fiction in the permanent record is worse than a
+  // day's delay. The exit re-fires on the next run with live quotes.
+  if (pos.markStale) {
+    return { blocked: true, reason: 'mark is stale — refusing to fill a paper close at unreliable prices' };
+  }
+
   if (openedToday && !canDayTrade(portfolio)) {
     return { blocked: true, reason: 'PDT: closing today would be a 4th day trade — hold until tomorrow unless catastrophic' };
   }
 
   // Paper closes fill at the slippage-adjusted price, not the flattering mid.
-  let proceeds, realizedPnl;
+  let proceeds, realizedPnl, exitSlippageCost;
   if (isCredit) {
-    const closeCost = pos.costToCloseSlipped ?? pos.costToClose ?? 0;
+    const closeCost = pos.costToCloseSlipped ?? pos.costToClose;
+    if (closeCost == null) return { blocked: true, reason: 'no close mark available — cannot price the fill' };
     proceeds = +(pos.entryValue + pos.entryCredit - closeCost).toFixed(2);
     realizedPnl = +(pos.entryCredit - closeCost).toFixed(2);
+    exitSlippageCost = pos.costToClose != null ? +(closeCost - pos.costToClose).toFixed(2) : null;
   } else {
     proceeds = pos.exitValue ?? pos.currentValue;
+    if (proceeds == null) return { blocked: true, reason: 'no close mark available — cannot price the fill' };
     realizedPnl = +(proceeds - pos.entryValue).toFixed(2);
+    exitSlippageCost = pos.currentValue != null ? +(pos.currentValue - proceeds).toFixed(2) : null;
   }
 
   portfolio.cash = +(portfolio.cash + proceeds).toFixed(2);
@@ -202,10 +227,32 @@ export function closePositionPaper(pos, portfolio, reason) {
     closedAt: new Date().toISOString(),
     closeReason: reason,
     realizedPnl,
+    exitSlippageCost,
   });
   if (openedToday) {
     portfolio.dayTrades.push({ date: new Date().toISOString(), symbol: pos.symbol, id: pos.id });
   }
   savePortfolio(portfolio);
   return { blocked: false, realizedPnl };
+}
+
+// Last-resort settlement for a position whose legs are ALL past expiry but
+// which was never marked (chain gone: delisting, symbol change, persistent
+// feed failure). Settles blind at the CONSERVATIVE worst case — long premium
+// to zero, credit spreads to max loss — so the record can never be flattered
+// by missing data. Deliberately does NOT route through closePositionPaper,
+// whose fallback pricing would flatter the fill.
+export function settleExpiredBlind(pos, portfolio) {
+  const allExpired = pos.legs.every((l) => new Date(`${l.expiry}T21:00:00Z`) < new Date());
+  if (!allExpired) return { settled: false };
+  portfolio.positions = portfolio.positions.filter((p) => p.id !== pos.id);
+  portfolio.closed.push({
+    ...pos,
+    closedAt: new Date().toISOString(),
+    closeReason: 'expired without market data — settled conservatively at total loss',
+    realizedPnl: +(-pos.entryValue).toFixed(2),
+    exitSlippageCost: null,
+  });
+  savePortfolio(portfolio);
+  return { settled: true, realizedPnl: -pos.entryValue };
 }

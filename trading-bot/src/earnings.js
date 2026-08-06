@@ -39,7 +39,15 @@ export async function getEarningsDate(symbol) {
     const j = await tryJson(
       `https://${host}.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=calendarEvents`
     );
-    const raw = j?.quoteSummary?.result?.[0]?.calendarEvents?.earnings?.earningsDate?.[0]?.raw;
+    // Take the earliest UPCOMING date — the feed sometimes leads with a past
+    // quarter, and a stale date must never masquerade as the next one.
+    const arr = j?.quoteSummary?.result?.[0]?.calendarEvents?.earnings?.earningsDate ?? [];
+    const cutoff = Date.now() / 1000 - 86400; // tolerate same-day
+    const raw = arr
+      .map((e) => e?.raw)
+      .filter((r) => typeof r === 'number')
+      .sort((a, b) => a - b)
+      .find((r) => r >= cutoff);
     if (raw) { date = new Date(raw * 1000).toISOString().slice(0, 10); break; }
   }
 
@@ -55,11 +63,13 @@ export async function earningsCheck(ticket) {
   const date = await getEarningsDate(ticket.symbol);
   const today = new Date().toISOString().slice(0, 10);
   const expiry = ticket.legs?.[0]?.expiry;
-  if (date && expiry && date >= today && date <= expiry) {
-    return { block: true, date, reason: `earnings ${date} lands before expiry ${expiry} — long premium through earnings gets IV-crushed` };
-  }
-  if (!date) {
+  // A past or missing date is the same thing: we do NOT know the next
+  // earnings date — warn, never wave through.
+  if (!date || date < today) {
     return { block: false, date: null, warning: 'earnings date unknown — VERIFY manually before executing (no long premium through earnings)' };
+  }
+  if (expiry && date <= expiry) {
+    return { block: true, date, reason: `earnings ${date} lands before expiry ${expiry} — long premium through earnings gets IV-crushed` };
   }
   return { block: false, date };
 }

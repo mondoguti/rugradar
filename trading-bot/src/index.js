@@ -15,18 +15,49 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import config from '../config.js';
-import { scanUniverse, marketRegime } from './scanner.js';
+import { scanUniverse, marketRegime, atmIV } from './scanner.js';
+import { getOptionsChain } from './marketdata.js';
 import { discoverUniverse } from './universe.js';
 import { earningsCheck } from './earnings.js';
 import { buildTicket } from './strategies.js';
 import { riskBudget, validateTicket, dayTradesInWindow, tierFor } from './risk.js';
 import { loadPortfolio, savePortfolio, loadTickets, saveTickets, equity } from './portfolio.js';
-import { executeTicketPaper, markPosition, exitDecision, closePositionPaper } from './paper.js';
+import { executeTicketPaper, markPosition, exitDecision, closePositionPaper, settleExpiredBlind } from './paper.js';
 import { performance, fmtMoney } from './report.js';
 
 const args = process.argv.slice(2);
 const cmd = args.find((a) => !a.startsWith('--')) || 'status';
 const asJson = args.includes('--json');
+
+const DATA_ROOT = path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), 'data');
+const HEARTBEAT = path.join(DATA_ROOT, 'heartbeat.json');
+
+// Dead-man switch: the worst failure mode isn't a bad trade — it's an open
+// position sitting unmanaged because the scheduler silently stopped. Every
+// autopilot run stamps a heartbeat; every run checks the previous one.
+function checkHeartbeat() {
+  try {
+    if (!fs.existsSync(HEARTBEAT)) return;
+    const hb = JSON.parse(fs.readFileSync(HEARTBEAT, 'utf8'));
+    const ageHours = (Date.now() - new Date(hb.lastRunAt)) / 3600000;
+    const day = new Date().getUTCDay(); // Sun=0, Mon=1
+    const allowed = (day === 0 || day === 1) ? 80 : 30; // weekend gap is normal
+    if (ageHours > allowed) {
+      console.log(`⚠ DEAD-MAN WARNING: last autopilot heartbeat was ${ageHours.toFixed(0)}h ago (allowed ${allowed}h) — scheduled runs may have been silently failing. Check the routine and recent commits.`);
+    }
+  } catch { /* best effort */ }
+}
+
+function writeHeartbeat(portfolio) {
+  try {
+    fs.mkdirSync(DATA_ROOT, { recursive: true });
+    fs.writeFileSync(HEARTBEAT, JSON.stringify({
+      lastRunAt: new Date().toISOString(),
+      equity: +equity(portfolio).toFixed(2),
+      openPositions: portfolio.positions.length,
+    }, null, 2));
+  } catch { /* best effort */ }
+}
 
 const out = (obj, human) => console.log(asJson ? JSON.stringify(obj, null, 2) : human);
 
@@ -69,11 +100,23 @@ async function cmdScan() {
   // build our own. Months of these snapshots unlock honest IV-rank signals
   // and credit-spread research that the backtester can't do today.
   try {
-    const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-    const jf = path.join(ROOT, 'data', 'iv-history.jsonl');
+    const jf = path.join(DATA_ROOT, 'iv-history.jsonl');
     fs.mkdirSync(path.dirname(jf), { recursive: true });
     const today = new Date().toISOString().slice(0, 10);
     const existing = fs.existsSync(jf) ? fs.readFileSync(jf, 'utf8') : '';
+    // De-bias the dataset: the scanner only fetches chains for signal-worthy
+    // symbols, which would record IV only on interesting days (selection
+    // bias). For the STATIC universe, fetch the chain regardless so every
+    // symbol gets a daily observation. Cache makes repeats cheap.
+    for (const s of results) {
+      if (s.atmIV == null && s.hv20 > 0 && config.universe.includes(s.symbol)) {
+        try {
+          const chain = await getOptionsChain(s.symbol);
+          const iv = atmIV(chain);
+          if (iv) { s.atmIV = iv; s.ivOverHv = iv / s.hv20; }
+        } catch { /* best effort — never blocks trading */ }
+      }
+    }
     const add = results
       .filter((s) => s.atmIV && s.ivOverHv && !existing.includes(`"date":"${today}","symbol":"${s.symbol}"`))
       .map((s) => JSON.stringify({ date: today, symbol: s.symbol, close: s.close, hv20: +s.hv20.toFixed(4), atmIV: +s.atmIV.toFixed(4), ivOverHv: +s.ivOverHv.toFixed(3) }));
@@ -140,11 +183,20 @@ async function cmdManage() {
   const portfolio = loadPortfolio();
   if (!portfolio.positions.length) { console.log('No open positions.'); return; }
   const actions = [];
-  for (const pos of portfolio.positions) {
+  for (const pos of [...portfolio.positions]) {
     try {
       await markPosition(pos);
     } catch (e) {
-      console.log(`  ! could not mark ${pos.symbol}: ${e.message}`);
+      // Chain fetch failed entirely (delisting, symbol change, feed outage).
+      // The position must still be time-managed with data-free facts.
+      pos.markFailures = (pos.markFailures || 0) + 1;
+      console.log(`  ! could not mark ${pos.symbol} (failure #${pos.markFailures}): ${e.message}`);
+      const blind = settleExpiredBlind(pos, portfolio);
+      if (blind.settled) {
+        console.log(`  SETTLED ${pos.symbol} blind: all legs expired with no market data — realized ${fmtMoney(blind.realizedPnl)} (conservative total loss)`);
+      } else if (pos.markFailures >= 3) {
+        console.log(`  ⚠ ${pos.symbol} has failed to mark ${pos.markFailures} runs in a row — investigate (delisted? renamed?)`);
+      }
       continue;
     }
     const d = exitDecision(pos);
@@ -153,7 +205,8 @@ async function cmdManage() {
   savePortfolio(portfolio);
 
   for (const a of actions) {
-    console.log(`${a.action === 'close' ? '→ CLOSE' : '  hold '} [${a.id}] ${a.symbol} ${a.structure}  uP&L ${fmtMoney(a.unrealizedPnl)}  ${a.dte} DTE  — ${a.reason}`);
+    const icon = a.action === 'close' ? '→ CLOSE' : a.action === 'flag' ? '⚑ FLAG ' : '  hold ';
+    console.log(`${icon} [${a.id}] ${a.symbol} ${a.structure}  uP&L ${fmtMoney(a.unrealizedPnl)}  ${a.dte} DTE  — ${a.reason}`);
   }
 
   const toClose = actions.filter((a) => a.action === 'close');
@@ -184,8 +237,18 @@ async function cmdStatus() {
   console.log(`Sizing tier: ${(tier.riskPct * 100).toFixed(1)}% risk/trade = ${fmtMoney(eq * tier.riskPct)} budget, ${tier.maxPositions} position slots`);
   console.log(`Day trades used: ${dt}/${config.risk.pdt.maxDayTrades} in rolling window`);
   console.log(`Open positions: ${portfolio.positions.length}/${tier.maxPositions}`);
+  let netDelta = 0, bull = 0, bear = 0;
   for (const p of portfolio.positions) {
-    console.log(`  [${p.id}] ${p.symbol} ${p.structure}  in ${fmtMoney(p.entryValue)}  now ${fmtMoney(p.currentValue)}  uP&L ${fmtMoney(p.unrealizedPnl)}  opened ${p.openedAt.slice(0, 10)}`);
+    console.log(`  [${p.id}] ${p.symbol} ${p.structure}  in ${fmtMoney(p.entryValue)}  now ${fmtMoney(p.currentValue)}  uP&L ${fmtMoney(p.unrealizedPnl)}  opened ${p.openedAt.slice(0, 10)}${p.markStale ? '  [STALE MARK]' : ''}`);
+    const spot = p.spotAtMark ?? p.spot ?? 0;
+    for (const leg of p.legs) {
+      if (leg.delta == null) continue;
+      netDelta += (leg.action === 'buy' ? 1 : -1) * leg.delta * leg.contracts * 100 * spot;
+    }
+    if (p.direction === 'bullish') bull++; else if (p.direction === 'bearish') bear++;
+  }
+  if (portfolio.positions.length) {
+    console.log(`Book exposure: net delta ${fmtMoney(netDelta)} of underlying (${bull} bullish / ${bear} bearish) — the book's aggregate directional bet`);
   }
 }
 
@@ -198,6 +261,34 @@ async function cmdReport() {
   console.log(`Win rate:      ${p.winRate ?? '—'}%   avg win ${fmtMoney(p.avgWin)}   avg loss ${fmtMoney(p.avgLoss)}   profit factor ${p.profitFactor ?? '—'}`);
   console.log(`Open:          ${p.openPositions} position(s)`);
   if (p.closedTrades < 20) console.log(`\nNote: ${p.closedTrades} trades is not statistical evidence. 20+ paper trades minimum before judging the system — or going live.`);
+
+  // --detail: the verdict-day breakdowns — which scores, regimes, and
+  // structures actually carried the record. This is where conviction-based
+  // sizing either earns its evidence or dies.
+  if (args.includes('--detail') && portfolio.closed.length) {
+    const stats = (trades) => {
+      const wins = trades.filter((t) => t.realizedPnl > 0);
+      const gw = wins.reduce((a, t) => a + t.realizedPnl, 0);
+      const gl = Math.abs(trades.filter((t) => t.realizedPnl <= 0).reduce((a, t) => a + t.realizedPnl, 0));
+      return `n=${String(trades.length).padStart(2)}  win ${((wins.length / trades.length) * 100).toFixed(0).padStart(3)}%  PF ${gl > 0 ? (gw / gl).toFixed(2) : '—'}  total ${fmtMoney(trades.reduce((a, t) => a + t.realizedPnl, 0))}`;
+    };
+    const groupBy = (arr, keyFn) => arr.reduce((m, t) => { const k = keyFn(t) ?? '—'; (m[k] ??= []).push(t); return m; }, {});
+    const dims = [
+      ['structure', (t) => t.structure],
+      ['direction', (t) => t.direction],
+      ['iv regime', (t) => t.ivRegime],
+      ['score', (t) => t.score == null ? null : t.score >= 85 ? '85+' : t.score >= 75 ? '75-84' : '65-74'],
+      ['exit', (t) => (t.closeReason || '').split(':')[0]],
+    ];
+    for (const [name, fn] of dims) {
+      console.log(`\nBy ${name}:`);
+      for (const [k, trades] of Object.entries(groupBy(portfolio.closed, fn))) {
+        console.log(`  ${k.padEnd(24)} ${stats(trades)}`);
+      }
+    }
+    const slip = portfolio.closed.reduce((a, t) => a + (t.entrySlippageCost || 0) + (t.exitSlippageCost || 0), 0);
+    console.log(`\nModeled slippage paid across closed trades: ${fmtMoney(slip)} — compare against real fills at go-live`);
+  }
 }
 
 async function cmdBacktest() {
@@ -228,6 +319,7 @@ async function cmdBacktest() {
 // PAPER ONLY by design — live orders always go through human confirmation.
 async function cmdAutopilot() {
   console.log(`\n=== autopilot run ${new Date().toISOString()} ===`);
+  checkHeartbeat();
   console.log('--- manage open positions ---');
   await cmdManage();
   console.log('--- scan for setups ---');
@@ -252,6 +344,7 @@ async function cmdAutopilot() {
   await cmdPaperBuy();
   console.log('--- portfolio after run ---');
   await cmdStatus();
+  writeHeartbeat(loadPortfolio());
 }
 
 async function cmdReset() {

@@ -11,6 +11,15 @@ const DATA_DIR = path.join(ROOT, 'data');
 const FILE = path.join(DATA_DIR, 'portfolio.json');
 const TICKETS = path.join(DATA_DIR, 'tickets.json');
 
+// Atomic write: tmp file + rename, so a crash mid-write can never truncate
+// the record (portfolio.json IS the forward record — the go-live judge).
+function atomicWrite(file, content) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, content);
+  fs.renameSync(tmp, file);
+}
+
 export function loadPortfolio() {
   if (!fs.existsSync(FILE)) {
     return {
@@ -22,22 +31,42 @@ export function loadPortfolio() {
       dayTrades: [],
     };
   }
-  return JSON.parse(fs.readFileSync(FILE, 'utf8'));
+  // Fail CLOSED on corruption: throwing halts the run loudly. Silently
+  // re-initializing would wipe the record, which is far worse than a
+  // skipped cycle.
+  let p;
+  try {
+    p = JSON.parse(fs.readFileSync(FILE, 'utf8'));
+  } catch (e) {
+    throw new Error(`portfolio.json is corrupted (${e.message}) — refusing to trade; restore it from git history`);
+  }
+  if (!Number.isFinite(p.cash) || !Array.isArray(p.positions) || !Array.isArray(p.closed) || !Array.isArray(p.dayTrades)) {
+    throw new Error('portfolio.json failed integrity checks (non-finite cash or missing arrays) — refusing to trade; restore from git history');
+  }
+  for (const pos of p.positions) {
+    if (!Array.isArray(pos.legs) || !Number.isFinite(pos.entryValue)) {
+      throw new Error(`portfolio.json position ${pos.id ?? '?'} is malformed — refusing to trade; restore from git history`);
+    }
+  }
+  return p;
 }
 
 export function savePortfolio(p) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(FILE, JSON.stringify(p, null, 2));
+  atomicWrite(FILE, JSON.stringify(p, null, 2));
 }
 
 export function loadTickets() {
   if (!fs.existsSync(TICKETS)) return [];
-  return JSON.parse(fs.readFileSync(TICKETS, 'utf8'));
+  try {
+    const t = JSON.parse(fs.readFileSync(TICKETS, 'utf8'));
+    return Array.isArray(t) ? t : [];
+  } catch {
+    return []; // tickets are ephemeral — a corrupt file just means no pending tickets
+  }
 }
 
 export function saveTickets(tickets) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(TICKETS, JSON.stringify(tickets, null, 2));
+  atomicWrite(TICKETS, JSON.stringify(tickets, null, 2));
 }
 
 // Calendar day in US market time. PDT rules and "same day" logic must use
