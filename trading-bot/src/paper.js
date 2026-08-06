@@ -245,6 +245,10 @@ export function closePositionPaper(pos, portfolio, reason) {
 export function settleExpiredBlind(pos, portfolio) {
   const allExpired = pos.legs.every((l) => new Date(`${l.expiry}T21:00:00Z`) < new Date());
   if (!allExpired) return { settled: false };
+  // A LIVE position must never be settled locally — the broker may have
+  // auto-exercised it for real proceeds. Leave it in state so the caller's
+  // reconcile warning repeats every run until the real fill is recorded.
+  if (pos.mode === 'live') return { settled: false, liveExpired: true };
   portfolio.positions = portfolio.positions.filter((p) => p.id !== pos.id);
   portfolio.closed.push({
     ...pos,

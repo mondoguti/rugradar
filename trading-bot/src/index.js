@@ -108,14 +108,23 @@ async function cmdScan() {
     // symbols, which would record IV only on interesting days (selection
     // bias). For the STATIC universe, fetch the chain regardless so every
     // symbol gets a daily observation. Cache makes repeats cheap.
+    // Bounded: a feed outage must not turn this best-effort pass into a
+    // serial retry marathon — 90s wall-clock budget, and three consecutive
+    // failures reads as an upstream outage (one outage hits every symbol).
+    const deadline = Date.now() + 90_000;
+    let misses = 0;
     for (const s of results) {
-      if (s.atmIV == null && s.hv20 > 0 && config.universe.includes(s.symbol)) {
-        try {
-          const chain = await getOptionsChain(s.symbol);
-          const iv = atmIV(chain);
-          if (iv) { s.atmIV = iv; s.ivOverHv = iv / s.hv20; }
-        } catch { /* best effort — never blocks trading */ }
+      if (s.atmIV != null || !(s.hv20 > 0) || !config.universe.includes(s.symbol)) continue;
+      if (Date.now() > deadline || misses >= 3) {
+        console.error('IV journal: aborting de-bias pass (time budget exhausted or repeated feed failures)');
+        break;
       }
+      try {
+        const chain = await getOptionsChain(s.symbol);
+        misses = 0;
+        const iv = atmIV(chain);
+        if (iv) { s.atmIV = iv; s.ivOverHv = iv / s.hv20; }
+      } catch { misses++; /* best effort — never blocks trading */ }
     }
     const add = results
       .filter((s) => s.atmIV && s.ivOverHv && !existing.includes(`"date":"${today}","symbol":"${s.symbol}"`))
@@ -194,10 +203,28 @@ async function cmdManage() {
       const blind = settleExpiredBlind(pos, portfolio);
       if (blind.settled) {
         console.log(`  SETTLED ${pos.symbol} blind: all legs expired with no market data — realized ${fmtMoney(blind.realizedPnl)} (conservative total loss)`);
+      } else if (blind.liveExpired) {
+        console.log(`  ⚠ LIVE position ${pos.symbol} is past expiry with no market data — reconcile the real broker settlement via /bot-manage and record the actual fill`);
       } else if (pos.markFailures >= 3) {
         console.log(`  ⚠ ${pos.symbol} has failed to mark ${pos.markFailures} runs in a row — investigate (delisted? renamed?)`);
       }
       continue;
+    }
+    // A successful chain fetch can still fail to quote the legs: expired
+    // contracts vanish from live chains, and a worthless option's bid drops
+    // to 0 (mid=null). Once every leg is past expiry the flag path can never
+    // resolve — quotes for an expired contract never come back — so settle
+    // blind exactly as the fetch-failure path does.
+    if (pos.markStale) {
+      const blind = settleExpiredBlind(pos, portfolio);
+      if (blind.settled) {
+        console.log(`  SETTLED ${pos.symbol} blind: all legs expired but quotes are gone — realized ${fmtMoney(blind.realizedPnl)} (conservative total loss)`);
+        continue; // removed from portfolio.positions — nothing left to decide
+      }
+      if (blind.liveExpired) {
+        console.log(`  ⚠ LIVE position ${pos.symbol} is past expiry with no quotes — reconcile the real broker settlement via /bot-manage and record the actual fill`);
+        continue;
+      }
     }
     const d = exitDecision(pos);
     actions.push({ id: pos.id, symbol: pos.symbol, structure: pos.structure, unrealizedPnl: pos.unrealizedPnl, dte: pos.dte, ...d });

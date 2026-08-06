@@ -129,7 +129,7 @@ export async function backtest({ symbols = config.universe, days = 750, offset =
         if (captured >= pos.credit * config.exits.profitTargetPct.creditSpread) exit = 'credit captured';
         if (!exit && costToClose - pos.credit >= pos.credit * config.exits.stopLossPct.creditSpread) exit = 'credit stop';
         if (!exit && pos.dteLeft * TRADING_TO_CAL <= config.exits.timeExitDTE) exit = 'time exit';
-        if (!exit && pos.heldDays >= config.exits.maxHoldDays) exit = 'max hold';
+        if (!exit && pos.heldDays * TRADING_TO_CAL >= config.exits.maxHoldDays) exit = 'max hold'; // heldDays counts trading days; maxHoldDays is calendar
         if (exit) {
           // collateral back plus captured premium, minus 4 legs of fees round-trip
           const proceeds = Math.max(pos.cost + captured * 100 * pos.contracts - 4 * FEE * pos.contracts, 0);
@@ -153,7 +153,7 @@ export async function backtest({ symbols = config.universe, days = 750, offset =
         if (pnl >= pos.maxGain * config.exits.profitTargetPct.debitSpread) exit = 'profit target';
         if (!exit && pnlPct <= -config.exits.stopLossPct.debitSpread) exit = 'stop loss';
         if (!exit && pos.dteLeft * TRADING_TO_CAL <= config.exits.timeExitDTE) exit = 'time exit';
-        if (!exit && pos.heldDays >= config.exits.maxHoldDays) exit = 'max hold';
+        if (!exit && pos.heldDays * TRADING_TO_CAL >= config.exits.maxHoldDays) exit = 'max hold'; // heldDays counts trading days; maxHoldDays is calendar
         if (exit) {
           const proceeds = Math.max(exitNet * 100 * pos.contracts - 2 * FEE * pos.contracts, 0);
           equity += proceeds;
@@ -190,7 +190,7 @@ export async function backtest({ symbols = config.universe, days = 750, offset =
         }
         if (!exit && !trail.enabled && pnlPct >= config.exits.profitTargetPct.long) exit = 'profit target';
         if (!exit && pos.dteLeft * TRADING_TO_CAL <= config.exits.timeExitDTE) exit = 'time exit';
-        if (!exit && pos.heldDays >= config.exits.maxHoldDays) exit = 'max hold';
+        if (!exit && pos.heldDays * TRADING_TO_CAL >= config.exits.maxHoldDays) exit = 'max hold'; // heldDays counts trading days; maxHoldDays is calendar
         if (exit) closePos(pos, prem, today.date, exit);
       }
 
@@ -220,9 +220,10 @@ export async function backtest({ symbols = config.universe, days = 750, offset =
           let best = null;
           for (let w = 0.5; w <= config.entries.maxSpreadWidth + 1e-9; w += 0.5) {
             const wingK = type === 'put' ? shortK - w : shortK + w;
+            if (wingK <= 0) break; // cheap underlying: put wing hit zero, wider only goes lower
             const wingP = priceOption(type, today.close, wingK, entryDte, iv);
             const midNet = shortP - wingP;
-            if (midNet <= 0.05) continue;
+            if (!Number.isFinite(midNet) || midNet <= 0.05) continue;
             if (midNet < w * config.entries.minCreditFractionOfWidth) continue;
             const credit = midNet * (1 - SLIP) - HALF_SPREAD_FLOOR;
             if (credit <= 0.02) continue;
@@ -251,10 +252,11 @@ export async function backtest({ symbols = config.universe, days = 750, offset =
           if (buyK == null || sellK == null) continue;
           const otm = type === 'call' ? 1 : -1;
           if (Math.abs(sellK - buyK) > config.entries.maxSpreadWidth) sellK = buyK + otm * config.entries.maxSpreadWidth;
+          if (sellK <= 0) continue;
           const buyP = priceOption(type, today.close, buyK, entryDte, iv);
           const sellP = priceOption(type, today.close, sellK, entryDte, iv);
           const midNet = buyP - sellP;
-          if (midNet <= 0.05) continue;
+          if (!Number.isFinite(midNet) || midNet <= 0.05) continue;
           const width = Math.abs(sellK - buyK);
           const debit = midNet * (1 + SLIP) + HALF_SPREAD_FLOOR;
           const costPer = debit * 100 + 2 * FEE;
@@ -274,21 +276,23 @@ export async function backtest({ symbols = config.universe, days = 750, offset =
         // affordable delta from 0.65 down to the 0.35 floor, premium cap
         // applied to the UN-slipped premium exactly as live caps the mid.
         const type = sig.direction === 'bullish' ? 'call' : 'put';
-        let strike = null, prem = null;
+        let strike = null, prem = null, contracts = 0;
         for (const d of [0.65, 0.60, 0.55, 0.50, 0.45, 0.40, 0.35]) {
           const k = strikeAtDelta(type, today.close, entryDte, iv, d);
           if (k == null) continue;
           const p = priceOption(type, today.close, k, entryDte, iv);
-          if (p >= 0.05 && (!config.entries.maxPremiumPerContract || p * 100 <= config.entries.maxPremiumPerContract)) {
-            strike = k; prem = p; break;
-          }
+          if (p < 0.05) continue;
+          if (config.entries.maxPremiumPerContract && p * 100 > config.entries.maxPremiumPerContract) continue;
+          // affordability is part of the walk-down: live buildLong steps to a
+          // cheaper rung when the budget can't fill this one, so must we
+          const n = Math.floor(budget / ((p * (1 + SLIP) + HALF_SPREAD_FLOOR) * 100 + FEE));
+          if (n >= 1) { strike = k; prem = p; contracts = n; break; }
         }
         if (strike == null) continue;
         const entryPremium = prem * (1 + SLIP) + HALF_SPREAD_FLOOR;
         const costPer = entryPremium * 100 + FEE;
         // full premium = planned risk (mirrors live sizing)
-        const contracts = Math.floor(budget / costPer);
-        if (contracts < 1 || costPer * contracts > equity * config.risk.maxDeployedPct) continue;
+        if (costPer * contracts > equity * config.risk.maxDeployedPct) continue;
         const cost = costPer * contracts;
         equity -= cost;
         open.set(symbol, {
