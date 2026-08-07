@@ -19,6 +19,18 @@ export default {
     'NVDA', 'TSLA', 'GM', 'PFE', 'WMT', 'KO', 'SNAP', 'UBER', 'CCL', 'DKNG',
   ],
 
+  // JOURNAL-ONLY universe — these symbols feed data/iv-history.jsonl and
+  // outcomes.jsonl daily but are NEVER scanned for tickets. Chain-verified
+  // liquid names (2026-08-07 screen) that small-account structures could
+  // plausibly trade someday; promotion to `universe` is an owner commit, not
+  // a code change. Correlated clusters noted: MARA/RIOT/CORZ/BITO(/IBIT),
+  // AAL/JBLU.
+  journalUniverse: [
+    'CORZ', 'RGTI', 'ACHR', 'HL', 'RIOT', 'PBR', 'LUNR', 'GDX', 'CELH',
+    'JBLU', 'AGNC', 'VALE', 'UNG', 'NIO', 'WOLF', 'BMNR', 'RIG', 'BITO',
+    'RDW', 'NVDL', 'SMR', 'ONDS', 'PATH', 'SLV', 'IBIT',
+  ],
+
   // Dynamic discovery: each scan also pulls trending / most-active / top-gainer
   // tickers and runs them through the SAME signal and risk gates as the static
   // list. Widens the funnel; never lowers the bar.

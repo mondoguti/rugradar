@@ -89,6 +89,16 @@
     "status": "journaling"
   },
   {
+    "id": "credit-route-revival",
+    "signal": "bestCreditFracPut / bestCreditFracCall (daily journal v3 fields) vs the frozen minCreditFractionOfWidth=0.25 floor",
+    "hypothesis": "The 25%-of-width credit floor is structurally unachievable on this universe at the 0.25-delta short (2026-08-07 snapshot measured 12-23% achievable on real liquid strikes; both rich-regime symbols failed at every budget), so the credit/VRP route — the wing with researched edge — is dead by construction rather than by market conditions. The daily bestCreditFrac series will confirm or refute this on forward data.",
+    "registeredAt": "2026-08-07",
+    "test": "manual_review",
+    "evidenceRequired": "At least 120 calendar days of bestCreditFracPut/Call observations across the journal universe. Review: per-symbol median achievable fraction, and the fraction of rich-regime days on which ANY symbol cleared 0.25. If the floor is confirmed structurally out of reach while VRP evidence (vrp-credit-gate observations) stays supportive, the owner MAY commit a revised floor and/or maxSpreadWidth — with the new values justified in the commit from this forward series, never from a backtest — and ONLY at equity >= $8,000 where ~$400 budgets make wider wings honestly sizeable.",
+    "activates": "Nothing automatically. This rule exists to start the evidence clock and to bind any future change of minCreditFractionOfWidth / maxSpreadWidth to forward data plus an explicit owner commit citing this id.",
+    "status": "journaling"
+  },
+  {
     "id": "parkinson-router",
     "signal": "hvP20 vs hv20 as the IV-regime denominator",
     "hypothesis": "The hv20- and Parkinson-based IV regime classifications disagree on at least 15% of rows, AND among disagreement rows the realized VRP sign (atmIV - rv21) agrees with the Parkinson classification at least 60% of the time — evidence the router's denominator should be A/B tested forward.",

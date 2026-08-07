@@ -81,6 +81,13 @@ export function executeTicketPaper(ticket, portfolio) {
   portfolio.cash = +(portfolio.cash - entryValue - entryFees).toFixed(2);
   portfolio.positions.push(position);
   savePortfolio(portfolio);
+  // Shadow fill at 50% of half-spread: telemetry for the open question of
+  // whether the modeled 25% flatters the record. Never touches recorded P&L.
+  const shadowExtra = fills.reduce((a, { leg, px }) => {
+    const half = (leg.ask - leg.bid) / 2;
+    const px50 = leg.action === 'buy' ? leg.mid + half * 0.5 : Math.max(leg.mid - half * 0.5, leg.bid);
+    return a + Math.abs(px50 - px) * leg.contracts * 100;
+  }, 0);
   appendExecLog({
     ts: new Date().toISOString(), id: position.id, symbol: position.symbol,
     structure: position.structure, mode: position.mode, event: 'open',
@@ -90,6 +97,7 @@ export function executeTicketPaper(ticket, portfolio) {
       spreadPctOfMid: leg.mid > 0 ? +((leg.ask - leg.bid) / leg.mid).toFixed(4) : null,
     })),
     midValue, fillValue: fillNet, slippage: entrySlippageCost, fees: entryFees,
+    shadow: { extraCostAt50: +shadowExtra.toFixed(2) },
   });
   return position;
 }
@@ -282,6 +290,12 @@ export function closePositionPaper(pos, portfolio, reason) {
     portfolio.dayTrades.push({ date: new Date().toISOString(), symbol: pos.symbol, id: pos.id });
   }
   savePortfolio(portfolio);
+  const shadowExtraClose = pos.legs.reduce((a, leg) => {
+    if (leg.markMid == null || leg.markClosePx == null) return a;
+    const half = (leg.markAsk - leg.markBid) / 2;
+    const px50 = leg.action === 'buy' ? Math.max(leg.markMid - half * 0.5, leg.markBid) : leg.markMid + half * 0.5;
+    return a + Math.abs(px50 - leg.markClosePx) * leg.contracts * 100;
+  }, 0);
   appendExecLog({
     ts: new Date().toISOString(), id: pos.id, symbol: pos.symbol,
     structure: pos.structure, mode: pos.mode, event: 'close',
@@ -292,6 +306,7 @@ export function closePositionPaper(pos, portfolio, reason) {
       spreadPctOfMid: leg.markMid > 0 ? +((leg.markAsk - leg.markBid) / leg.markMid).toFixed(4) : null,
     })),
     midValue: midCloseValue, fillValue: proceeds, slippage: exitSlippageCost, fees: exitFees,
+    shadow: { extraCostAt50: +shadowExtraClose.toFixed(2) },
   });
   return { blocked: false, realizedPnl };
 }

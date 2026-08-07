@@ -10,6 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import config from '../config.js';
 import { atmIV } from './scanner.js';
 import { getDailyHistory, useFixtures } from './marketdata.js';
 import { historicalVol } from './indicators.js';
@@ -154,6 +155,53 @@ export function flowMetrics(chain) {
   };
 }
 
+// Frozen-gate evidence, measured daily from the chain we already hold (zero
+// extra network). The throughput audit (2026-08-07) showed two frozen gates
+// bind hardest: the $50 premium cap and the 25%-of-width credit floor. These
+// fields are the FORWARD dataset any future pre-registered proposal about
+// those gates will be judged against — telemetry only, never an input.
+export function gateMetrics(chain) {
+  const L = config.entries.liquidity;
+  const liquid = (c) => c.mid != null && c.bid >= L.minBid && c.openInterest >= L.minOpenInterest &&
+    !((c.ask - c.bid) / c.mid > L.maxBidAskPctOfMid && c.ask - c.bid > 0.10);
+  // Cheapest liquid contract in the tradeable delta band and DTE window —
+  // what the long route would have to afford.
+  const [minDte, maxDte] = config.entries.dte.long;
+  let cheapest = null;
+  for (const c of chain.contracts) {
+    if (c.dte < minDte || c.dte > maxDte || c.delta == null) continue;
+    const d = Math.abs(c.delta);
+    if (d < config.entries.delta.longMin || d > 0.65 || !liquid(c)) continue;
+    const px = c.mid * 100;
+    if (cheapest == null || px < cheapest) cheapest = px;
+  }
+  // Best achievable credit fraction of width at the ~0.25-delta short with a
+  // real liquid wing — measures the CHAIN, deliberately ignoring any budget.
+  const expiry = anchorExpiry(chain);
+  const bestFrac = (type) => {
+    if (!expiry) return null;
+    const pool = chain.contracts.filter((c) => c.type === type && c.expiry === expiry && c.delta != null && liquid(c));
+    if (!pool.length) return null;
+    const target = config.entries.delta.creditSell;
+    const short = pool.reduce((b, c) => Math.abs(Math.abs(c.delta) - target) < Math.abs(Math.abs(b.delta) - target) ? c : b);
+    if (Math.abs(Math.abs(short.delta) - target) > config.entries.delta.nearTolerance) return null;
+    const otm = type === 'call' ? 1 : -1;
+    let best = null;
+    for (const w of pool) {
+      const width = (w.strike - short.strike) * otm;
+      if (width <= 0 || width > config.entries.maxSpreadWidth) continue;
+      const frac = (short.mid - w.mid) / width;
+      if (Number.isFinite(frac) && (best == null || frac > best)) best = frac;
+    }
+    return best != null ? +best.toFixed(3) : null;
+  };
+  return {
+    cheapestDeltaBandPremium: cheapest != null ? +cheapest.toFixed(2) : null,
+    bestCreditFracPut: bestFrac('put'),
+    bestCreditFracCall: bestFrac('call'),
+  };
+}
+
 // One journal row per symbol per market day. Key order matters: date-then-
 // symbol first keeps the existing substring dedup key working on old and new
 // rows alike. Nulls are recorded honestly — never interpolated fabrications.
@@ -181,6 +229,7 @@ export function buildJournalRow(s, chain, date) {
     hvWindowBars: s.hvWindowBars ?? null,
     adv20: s.avgDollarVolume != null ? Math.round(s.avgDollarVolume) : null,
     ...flowMetrics(chain),
+    ...gateMetrics(chain),
     dFomc: daysToNext('fomc', date),  // calendar days to next FOMC decision (null past verified coverage)
     dCpi: daysToNext('cpi', date),
     snapshot: 'open',

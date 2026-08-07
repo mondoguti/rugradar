@@ -2,7 +2,8 @@
 // be executed (paper or live). These checks are the whole point of the bot.
 
 import config from '../config.js';
-import { equity, realizedToday } from './portfolio.js';
+import { equity, realizedToday, etDay } from './portfolio.js';
+import { tradingDaysBetween } from './calendar.js';
 
 // Current sizing tier for an equity level — see config.risk.tiers.
 export function tierFor(eq) {
@@ -32,10 +33,13 @@ export function riskBudget(portfolio) {
   return eq * tierFor(eq).riskPct * governorState(portfolio).riskFactor;
 }
 
-// Rolling day-trade count over the PDT window (5 trading days ~ 7 calendar days).
+// Rolling day-trade count over the PDT window, in ACTUAL trading days —
+// FINRA counts business days, and the old 5x1.4-calendar-day approximation
+// released day trades early around holidays (a flattering gap vs the real
+// broker rule).
 export function dayTradesInWindow(portfolio, now = new Date()) {
-  const windowMs = config.risk.pdt.windowDays * 1.4 * 86400000; // trading->calendar days
-  return portfolio.dayTrades.filter((d) => now - new Date(d.date) < windowMs).length;
+  const today = etDay(now);
+  return portfolio.dayTrades.filter((d) => tradingDaysBetween(etDay(new Date(d.date)), today) < config.risk.pdt.windowDays).length;
 }
 
 export function canDayTrade(portfolio) {

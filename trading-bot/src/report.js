@@ -1,7 +1,7 @@
 // Performance reporting over the closed-trade history.
 
 import config from '../config.js';
-import { equity } from './portfolio.js';
+import { equity, readExecLog } from './portfolio.js';
 
 export function performance(portfolio) {
   const closed = portfolio.closed;
@@ -59,6 +59,27 @@ export function gateStatus(portfolio) {
     tradesPerWeek,
     estWeeksRemaining,
     frozenAt,
+  };
+}
+
+// TELEMETRY ONLY: recompute PF as if fills paid 50% of the half-spread
+// instead of the modeled 25%. Answers "would a harsher slippage assumption
+// flip the record's verdict?" without touching recorded P&L — the gate reads
+// recorded numbers, never this.
+export function shadowPerformance(portfolio) {
+  const extras = new Map(); // id -> total extra cost across open+close
+  for (const e of readExecLog()) {
+    if (e.shadow?.extraCostAt50 == null) continue;
+    extras.set(e.id, (extras.get(e.id) || 0) + e.shadow.extraCostAt50);
+  }
+  if (!extras.size) return null;
+  const shadowPnls = portfolio.closed.map((t) => t.realizedPnl - (extras.get(t.id) || 0));
+  const gw = shadowPnls.filter((p) => p > 0).reduce((a, p) => a + p, 0);
+  const gl = Math.abs(shadowPnls.filter((p) => p <= 0).reduce((a, p) => a + p, 0));
+  return {
+    tradesWithShadow: [...extras.keys()].filter((id) => portfolio.closed.some((t) => t.id === id)).length,
+    shadowProfitFactor: gl > 0 ? +(gw / gl).toFixed(2) : null,
+    extraFrictionTotal: +[...extras.values()].reduce((a, v) => a + v, 0).toFixed(2),
   };
 }
 

@@ -26,6 +26,43 @@ export const MACRO_2026 = {
   cpi: ['2026-01-13', '2026-02-13', '2026-03-11', '2026-04-10', '2026-05-12', '2026-06-10', '2026-07-14', '2026-08-12', '2026-09-11'],
 };
 
+// 2026 US market holidays (NYSE full closures), for trading-day arithmetic.
+// Verified against the published NYSE calendar at implementation time.
+export const MARKET_HOLIDAYS_2026 = new Set([
+  '2026-01-01', // New Year's Day
+  '2026-01-19', // MLK Day
+  '2026-02-16', // Presidents' Day
+  '2026-04-03', // Good Friday
+  '2026-05-25', // Memorial Day
+  '2026-06-19', // Juneteenth
+  '2026-07-03', // Independence Day (observed)
+  '2026-09-07', // Labor Day
+  '2026-11-26', // Thanksgiving
+  '2026-12-25', // Christmas
+]);
+const HOLIDAY_COVERAGE_END = '2026-12-31';
+
+const isTradingDay = (isoDay) => {
+  const dow = new Date(`${isoDay}T12:00:00Z`).getUTCDay();
+  return dow >= 1 && dow <= 5 && !MARKET_HOLIDAYS_2026.has(isoDay);
+};
+
+// Trading days in (fromEtDay, toEtDay]: same day -> 0, next business day -> 1.
+// Beyond holiday coverage, non-listed weekdays count as trading days (the
+// conservative direction for PDT: counting more days keeps trades in the
+// window LONGER, never releasing a day trade early).
+export function tradingDaysBetween(fromEtDay, toEtDay) {
+  if (toEtDay <= fromEtDay) return 0;
+  let count = 0;
+  const d = new Date(`${fromEtDay}T12:00:00Z`);
+  const end = new Date(`${toEtDay}T12:00:00Z`);
+  while (d < end) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    if (isTradingDay(d.toISOString().slice(0, 10))) count++;
+  }
+  return count;
+}
+
 // Next event of a type on/after `from` — {date, days} or null past coverage.
 export function nextEvent(type, from = etDay()) {
   const next = (MACRO_2026[type] ?? []).find((d) => d >= from);
@@ -52,6 +89,10 @@ export function coverageWarnings(from = etDay()) {
     if (daysLeft <= 60) {
       warnings.push(`macro calendar: ${type.toUpperCase()} coverage ends ${last} (${daysLeft}d away) — verify the next dates against the primary source and extend MACRO_2026 in src/calendar.js`);
     }
+  }
+  const holidayDaysLeft = Math.round((new Date(HOLIDAY_COVERAGE_END) - new Date(from)) / 86400000);
+  if (holidayDaysLeft <= 60) {
+    warnings.push(`market-holiday calendar ends ${HOLIDAY_COVERAGE_END} (${holidayDaysLeft}d away) — add the next year's NYSE holidays to MARKET_HOLIDAYS in src/calendar.js`);
   }
   return warnings;
 }

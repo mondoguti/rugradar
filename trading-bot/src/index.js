@@ -192,17 +192,25 @@ async function cmdScan() {
     fs.mkdirSync(path.dirname(jf), { recursive: true });
     const today = etDay(); // market day, not UTC day — a late-UTC run must not roll the date
     const existing = fs.existsSync(jf) ? fs.readFileSync(jf, 'utf8') : '';
+    // Journal-only symbols: recorded daily, NEVER traded (config.journalUniverse).
+    // INVARIANT: extraResults must never merge into `results` — the trading
+    // path (candidates filter above) reads `results` and stays byte-identical.
+    const extraSyms = (config.journalUniverse || []).filter((x) => !universe.includes(x));
+    const { results: extraResults } = extraSyms.length ? await scanUniverse(extraSyms) : { results: [] };
+    const journalResults = [...results, ...extraResults];
+    const inJournalSet = new Set([...config.universe, ...(config.journalUniverse || [])]);
     // De-bias the dataset: the scanner only fetches chains for signal-worthy
     // symbols, which would record IV only on interesting days (selection
-    // bias). For the STATIC universe, fetch the chain regardless so every
-    // symbol gets a daily observation. Cache makes repeats cheap.
+    // bias). For journal members, fetch the chain regardless so every symbol
+    // gets a daily observation. Cache makes repeats cheap.
     // Bounded: a feed outage must not turn this best-effort pass into a
-    // serial retry marathon — 90s wall-clock budget, and three consecutive
-    // failures reads as an upstream outage (one outage hits every symbol).
-    const deadline = Date.now() + 90_000;
+    // serial retry marathon — wall-clock budget (larger when the journal-only
+    // list adds ~25 throttled fetches), and three consecutive failures reads
+    // as an upstream outage (one outage hits every symbol).
+    const deadline = Date.now() + (extraSyms.length ? 240_000 : 90_000);
     let misses = 0;
-    for (const s of results) {
-      if (s.atmIV != null || !(s.hv20 > 0) || !config.universe.includes(s.symbol)) continue;
+    for (const s of journalResults) {
+      if (s.atmIV != null || !(s.hv20 > 0) || !inJournalSet.has(s.symbol)) continue;
       if (Date.now() > deadline || misses >= 3) {
         console.error('IV journal: aborting de-bias pass (time budget exhausted or repeated feed failures)');
         break;
@@ -215,7 +223,7 @@ async function cmdScan() {
         s.chain = chain; // keep for the surface snapshot below — was discarded
       } catch { misses++; /* best effort — never blocks trading */ }
     }
-    const add = results
+    const add = journalResults
       .filter((s) => s.atmIV && s.ivOverHv && s.chain && !existing.includes(`"date":"${today}","symbol":"${s.symbol}"`))
       .map((s) => JSON.stringify(buildJournalRow(s, s.chain, today)));
     if (add.length) {
@@ -223,7 +231,7 @@ async function cmdScan() {
       console.error(`IV journal: recorded ${add.length} symbol(s) for ${today}`);
     }
     // Label past journal rows whose 21-bar future has now been written.
-    const b = await backfillOutcomes(new Set(results.map((s) => s.symbol)));
+    const b = await backfillOutcomes(new Set(journalResults.map((s) => s.symbol)));
     if (b.appended) console.error(`outcomes: labeled ${b.appended} past journal row(s) with forward returns`);
   } catch { /* journaling is best-effort, never blocks trading */ }
 
@@ -434,6 +442,11 @@ async function cmdReport() {
   console.log(`Win rate:      ${p.winRate ?? '—'}%   avg win ${fmtMoney(p.avgWin)}   avg loss ${fmtMoney(p.avgLoss)}   profit factor ${p.profitFactor ?? '—'}`);
   console.log(`Open:          ${p.openPositions} position(s)`);
   console.log(`\n${gateLine(gateStatus(portfolio))}`);
+  const { shadowPerformance } = await import('./report.js');
+  const sp = shadowPerformance(portfolio);
+  if (sp && sp.tradesWithShadow > 0) {
+    console.log(`Shadow PF at 50%-of-half-spread fills: ${sp.shadowProfitFactor ?? '—'} over ${sp.tradesWithShadow} trade(s) (telemetry only — the gate reads recorded P&L). If shadow PF diverges hard from recorded PF, the slippage assumption is doing the earning.`);
+  }
 
   // --detail: the verdict-day breakdowns — which scores, regimes, and
   // structures actually carried the record. This is where conviction-based

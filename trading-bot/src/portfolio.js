@@ -98,6 +98,14 @@ export function appendOpsLog(entry) {
     fs.appendFileSync(OPS_LOG, JSON.stringify(entry) + '\n');
   } catch { /* telemetry only */ }
 }
+export function readExecLog() {
+  try {
+    return fs.readFileSync(EXEC_LOG, 'utf8').split('\n').filter(Boolean).map((l) => {
+      try { return JSON.parse(l); } catch { return null; }
+    }).filter(Boolean);
+  } catch { return []; }
+}
+
 export function readOpsLog() {
   try {
     return fs.readFileSync(OPS_LOG, 'utf8').split('\n').filter(Boolean).map((l) => {

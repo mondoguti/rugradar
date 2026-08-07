@@ -208,6 +208,9 @@ export function evaluateRules(portfolio) {
       if (rule.test === 'vrp_credit_join') return evalVrpCreditJoin(rule, joined, portfolio);
       if (rule.test === 'parkinson_disagreement') return evalParkinsonDisagreement(rule, joined);
       if (rule.test === 'closed_trade_split') return evalClosedTradeSplit(rule, portfolio);
+      if (rule.test === 'manual_review') {
+        return { id: rule.id, status: 'INSUFFICIENT_DATA', detail: `owner-review rule — evidence required: ${rule.evidenceRequired}` };
+      }
       return { id: rule.id, status: 'UNKNOWN_TEST', detail: `unrecognized test '${rule.test}'` };
     } catch (e) {
       return { id: rule.id, status: 'ERROR', detail: e.message };

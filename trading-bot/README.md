@@ -135,6 +135,18 @@ re-tuning on backtests manufactures fake edges. New ideas follow one road:
 
 ## Going live (only after paper proves out)
 
+**Record-integrity disclosures (2026-08-07):**
+- Closed trade #1 (BBAI, +$5.00, 2026-08-05) filled under cost-model v1,
+  before per-contract fees existed; under v2 it would read +$4.60 (5 contracts
+  × 2 sides × $0.04). When judging the 20-trade gate, apply a −$0.40
+  adjustment to this trade. Cost-model history: v1 through 2026-08-05; v2
+  (symmetric per-leg slippage, credit-collateral growth, $0.04/contract/side
+  fees) thereafter — trades carry `costModelVersion` tags and `report
+  --detail` segments by them, so the two eras are never silently pooled.
+- Tier boundary wrinkle for gate-pace planning: the per-trade budget is $375
+  at exactly $5,000 equity (7.5% tier) but drops to $250 at $5,001 (5% tier),
+  regaining $375 only at $7,500 — target ~$7,500, not $5,000.
+
 Checklist before the first real order:
 - [ ] 20+ paper trades logged, `report` shows positive expectancy (profit factor > 1.2)
 - [ ] You understand every trade the bot proposed — including the ones it skipped
