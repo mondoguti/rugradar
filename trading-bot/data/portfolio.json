@@ -48,5 +48,7 @@
       "realizedPnl": 5
     }
   ],
-  "dayTrades": []
+  "dayTrades": [],
+  "equityHighWater": 2005,
+  "governorRung": 0
 }
