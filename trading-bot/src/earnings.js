@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { useFixtures } from './marketdata.js';
+import { etDay } from './portfolio.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const CACHE = path.join(ROOT, 'data', 'cache');
@@ -61,7 +62,7 @@ export async function getEarningsDate(symbol) {
 // /bot-scan flow has Claude double-check dates before execution).
 export async function earningsCheck(ticket) {
   const date = await getEarningsDate(ticket.symbol);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = etDay(); // market day — UTC evenings must not mark today's earnings as past
   const expiry = ticket.legs?.[0]?.expiry;
   // A past or missing date is the same thing: we do NOT know the next
   // earnings date — warn, never wave through.

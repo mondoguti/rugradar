@@ -22,9 +22,37 @@ export function bsDelta({ type, spot, strike, dte, iv, r = 0.04 }) {
 
 export function bsPrice({ type, spot, strike, dte, iv, r = 0.04 }) {
   const t = Math.max(dte, 0.5) / 365;
-  if (!iv || iv <= 0) return null;
+  if (!iv || iv <= 0 || !(spot > 0) || !(strike > 0)) return null; // log(neg) = NaN, never a price
   const D1 = d1(spot, strike, t, iv, r);
   const D2 = D1 - iv * Math.sqrt(t);
   if (type === 'call') return spot * normCdf(D1) - strike * Math.exp(-r * t) * normCdf(D2);
   return strike * Math.exp(-r * t) * normCdf(-D2) - spot * normCdf(-D1);
+}
+
+const SQRT_2PI = Math.sqrt(2 * Math.PI);
+export function normPdf(x) { return Math.exp(-x * x / 2) / SQRT_2PI; }
+
+export function bsGamma({ spot, strike, dte, iv, r = 0.04 }) {
+  const t = Math.max(dte, 0.5) / 365;
+  if (!iv || iv <= 0 || !(spot > 0) || !(strike > 0)) return null;
+  return normPdf(d1(spot, strike, t, iv, r)) / (spot * iv * Math.sqrt(t));
+}
+
+// Per 1 vol POINT (divide raw vega by 100) — broker/CBOE convention.
+export function bsVega({ spot, strike, dte, iv, r = 0.04 }) {
+  const t = Math.max(dte, 0.5) / 365;
+  if (!iv || iv <= 0 || !(spot > 0) || !(strike > 0)) return null;
+  return spot * normPdf(d1(spot, strike, t, iv, r)) * Math.sqrt(t) / 100;
+}
+
+// Per calendar DAY — broker/CBOE convention.
+export function bsTheta({ type, spot, strike, dte, iv, r = 0.04 }) {
+  const t = Math.max(dte, 0.5) / 365;
+  if (!iv || iv <= 0 || !(spot > 0) || !(strike > 0)) return null;
+  const D1 = d1(spot, strike, t, iv, r);
+  const D2 = D1 - iv * Math.sqrt(t);
+  const common = -spot * normPdf(D1) * iv / (2 * Math.sqrt(t));
+  const carry = r * strike * Math.exp(-r * t);
+  const yearly = type === 'call' ? common - carry * normCdf(D2) : common + carry * normCdf(-D2);
+  return yearly / 365;
 }

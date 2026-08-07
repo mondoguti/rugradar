@@ -5,3 +5,7 @@ data/cache/
 
 # generated synthetic test data — recreate with: node trading-bot/fixtures/generate.js
 fixtures/*.json
+
+# fixture-mode state world (--fixtures redirects ALL reads/writes here so
+# tests can never touch the real record) — never committed
+data-fixtures/

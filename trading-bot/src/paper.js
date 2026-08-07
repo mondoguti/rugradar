@@ -5,8 +5,11 @@
 import config from '../config.js';
 import { getOptionsChain, getDailyHistory } from './marketdata.js';
 import { ema, atr } from './indicators.js';
-import { savePortfolio, etDay } from './portfolio.js';
+import { savePortfolio, etDay, appendExecLog } from './portfolio.js';
 import { canDayTrade } from './risk.js';
+import { bsDelta, bsTheta, bsVega } from './bs.js';
+
+const feesFor = (legs) => +(legs.reduce((a, l) => a + l.contracts, 0) * config.data.feePerContract).toFixed(2);
 
 // Positive position value = what you'd receive closing it (long structures).
 // Credit spreads are stored with entryValue = collateral (max loss) and
@@ -18,21 +21,36 @@ function slip(price, half) {
 
 export function executeTicketPaper(ticket, portfolio) {
   const isCredit = ticket.netCredit != null;
-  let entryValue;
+  // Per-leg fills, symmetric for every structure: buys pay worse than mid,
+  // sells receive worse than mid. (Credit entries used to fill at raw mid —
+  // flattering the exact structure the strategy leans on at scale.)
+  const fills = ticket.legs.map((leg) => {
+    const half = (leg.ask - leg.bid) / 2;
+    const px = leg.action === 'buy' ? slip(leg.mid, half) : Math.max(leg.mid - half * config.data.slippage, leg.bid);
+    return { leg, px };
+  });
+  const fillNet = +fills.reduce((a, { leg, px }) => a + (leg.action === 'buy' ? px : -px) * leg.contracts * 100, 0).toFixed(2);
+  const midValue = +ticket.legs.reduce((a, leg) => a + (leg.action === 'buy' ? leg.mid : -leg.mid) * leg.contracts * 100, 0).toFixed(2);
+
+  let entryValue, entryCredit, entrySlippageCost;
   if (isCredit) {
-    entryValue = ticket.maxLoss; // collateral held
+    // fillNet is negative: the credit actually received after slippage.
+    const slippedCredit = +(-fillNet).toFixed(2);
+    entryCredit = slippedCredit;
+    entrySlippageCost = +(ticket.netCredit - slippedCredit).toFixed(2);
+    // Collateral = width - credit received: slippage GROWS the max loss.
+    entryValue = +(ticket.width * 100 * ticket.legs[0].contracts - slippedCredit).toFixed(2);
   } else {
-    // pay slightly worse than mid on each leg
-    entryValue = ticket.legs.reduce((a, leg) => {
-      const half = (leg.ask - leg.bid) / 2;
-      const px = leg.action === 'buy' ? slip(leg.mid, half) : Math.max(leg.mid - half * config.data.slippage, leg.bid);
-      return a + (leg.action === 'buy' ? px : -px) * leg.contracts * 100;
-    }, 0);
-    entryValue = +entryValue.toFixed(2);
+    entryValue = fillNet;
+    entryCredit = null;
+    entrySlippageCost = +(fillNet - midValue).toFixed(2);
   }
-  // execution-quality ledger: what the slippage assumption cost on this fill
-  const midValue = ticket.legs.reduce((a, leg) => a + (leg.action === 'buy' ? leg.mid : -leg.mid) * leg.contracts * 100, 0);
-  const entrySlippageCost = isCredit ? null : +(entryValue - midValue).toFixed(2);
+  const entryFees = feesFor(ticket.legs);
+  // Never overdraw paper cash: the validator checked the mid-based cost, but
+  // the actual fill deducts slippage-grown collateral plus fees.
+  if (entryValue + entryFees > portfolio.cash) {
+    return { blocked: true, reason: `fill needs $${(entryValue + entryFees).toFixed(2)} (slippage-grown cost + fees) but cash is $${portfolio.cash.toFixed(2)}` };
+  }
 
   const position = {
     id: ticket.id,
@@ -44,21 +62,35 @@ export function executeTicketPaper(ticket, portfolio) {
     ivRegime: ticket.ivRegime,         // "do high-score / cheap-IV trades win more?"
     legs: ticket.legs,
     openedAt: new Date().toISOString(),
-    entryValue,                        // debit paid (or collateral for credit)
-    entryCredit: isCredit ? ticket.netCredit : null,
-    maxLoss: ticket.maxLoss,
+    entryValue,                        // debit paid (or collateral for credit, slippage-grown)
+    entryCredit,
+    maxLoss: isCredit ? entryValue : ticket.maxLoss,
     maxGain: ticket.maxGain,
     dteAtOpen: ticket.dte,
     thesis: ticket.thesis,
     spot: ticket.spot,
+    macro: ticket.macro ?? null,       // FOMC/CPI context at entry — closed trades keep it
+    earningsDate: ticket.earningsDate ?? null,
     entrySlippageCost,
+    entryFees,
+    costModelVersion: 2,               // v2 = slipped credit fills + per-contract fees
     currentValue: entryValue,
     unrealizedPnl: 0,
   };
 
-  portfolio.cash = +(portfolio.cash - entryValue).toFixed(2);
+  portfolio.cash = +(portfolio.cash - entryValue - entryFees).toFixed(2);
   portfolio.positions.push(position);
   savePortfolio(portfolio);
+  appendExecLog({
+    ts: new Date().toISOString(), id: position.id, symbol: position.symbol,
+    structure: position.structure, mode: position.mode, event: 'open',
+    legs: fills.map(({ leg, px }) => ({
+      action: leg.action, type: leg.type, strike: leg.strike, expiry: leg.expiry,
+      bid: leg.bid, ask: leg.ask, mid: leg.mid, fillPx: +px.toFixed(4),
+      spreadPctOfMid: leg.mid > 0 ? +((leg.ask - leg.bid) / leg.mid).toFixed(4) : null,
+    })),
+    midValue, fillValue: fillNet, slippage: entrySlippageCost, fees: entryFees,
+  });
   return position;
 }
 
@@ -88,6 +120,16 @@ export async function markPosition(pos) {
       : q.mid + half * config.data.slippage;
     value += (leg.action === 'buy' ? q.mid : -q.mid) * leg.contracts * 100;
     exitValue += (leg.action === 'buy' ? closePx : -closePx) * leg.contracts * 100;
+    // Mark-time annotations (NEVER overwrite the entry-time leg fields):
+    // latest quote for the execution ledger, and refreshed greeks so book
+    // exposure reflects TODAY's deltas, not the entry-day snapshot.
+    leg.markBid = q.bid; leg.markAsk = q.ask; leg.markMid = q.mid;
+    leg.markClosePx = +closePx.toFixed(4);
+    const gp = { type: leg.type, spot: chain.spot, strike: leg.strike, dte: q.dte, iv: q.iv ?? leg.iv, r: config.data.riskFreeRate };
+    leg.markDelta = q.delta ?? bsDelta(gp);
+    leg.markIv = q.iv ?? null;
+    leg.markTheta = q.theta ?? bsTheta(gp);
+    leg.markVega = q.vega ?? bsVega(gp);
   }
   const isCredit = pos.entryCredit != null;
   // A stale mark (any leg unquoted) must never overwrite the position's
@@ -205,19 +247,25 @@ export function closePositionPaper(pos, portfolio, reason) {
     return { blocked: true, reason: 'PDT: closing today would be a 4th day trade — hold until tomorrow unless catastrophic' };
   }
 
-  // Paper closes fill at the slippage-adjusted price, not the flattering mid.
-  let proceeds, realizedPnl, exitSlippageCost;
+  // Paper closes fill at the slippage-adjusted price, not the flattering mid,
+  // and pay per-contract fees on the way out (entry fees were paid at open).
+  const exitFees = feesFor(pos.legs);
+  const entryFeesPaid = pos.entryFees || 0;
+  let proceeds, realizedPnl, exitSlippageCost, midCloseValue;
   if (isCredit) {
     const closeCost = pos.costToCloseSlipped ?? pos.costToClose;
     if (closeCost == null) return { blocked: true, reason: 'no close mark available — cannot price the fill' };
-    proceeds = +(pos.entryValue + pos.entryCredit - closeCost).toFixed(2);
-    realizedPnl = +(pos.entryCredit - closeCost).toFixed(2);
+    proceeds = +(pos.entryValue + pos.entryCredit - closeCost - exitFees).toFixed(2);
+    realizedPnl = +(pos.entryCredit - closeCost - entryFeesPaid - exitFees).toFixed(2);
     exitSlippageCost = pos.costToClose != null ? +(closeCost - pos.costToClose).toFixed(2) : null;
+    midCloseValue = pos.costToClose ?? null;
   } else {
-    proceeds = pos.exitValue ?? pos.currentValue;
-    if (proceeds == null) return { blocked: true, reason: 'no close mark available — cannot price the fill' };
-    realizedPnl = +(proceeds - pos.entryValue).toFixed(2);
-    exitSlippageCost = pos.currentValue != null ? +(pos.currentValue - proceeds).toFixed(2) : null;
+    const gross = pos.exitValue ?? pos.currentValue;
+    if (gross == null) return { blocked: true, reason: 'no close mark available — cannot price the fill' };
+    proceeds = +(gross - exitFees).toFixed(2);
+    realizedPnl = +(proceeds - pos.entryValue - entryFeesPaid).toFixed(2);
+    exitSlippageCost = pos.currentValue != null ? +(pos.currentValue - gross).toFixed(2) : null;
+    midCloseValue = pos.currentValue ?? null;
   }
 
   portfolio.cash = +(portfolio.cash + proceeds).toFixed(2);
@@ -228,11 +276,129 @@ export function closePositionPaper(pos, portfolio, reason) {
     closeReason: reason,
     realizedPnl,
     exitSlippageCost,
+    exitFees,
   });
   if (openedToday) {
     portfolio.dayTrades.push({ date: new Date().toISOString(), symbol: pos.symbol, id: pos.id });
   }
   savePortfolio(portfolio);
+  appendExecLog({
+    ts: new Date().toISOString(), id: pos.id, symbol: pos.symbol,
+    structure: pos.structure, mode: pos.mode, event: 'close',
+    legs: pos.legs.map((leg) => ({
+      action: leg.action, type: leg.type, strike: leg.strike, expiry: leg.expiry,
+      bid: leg.markBid ?? null, ask: leg.markAsk ?? null, mid: leg.markMid ?? null,
+      fillPx: leg.markClosePx ?? null,
+      spreadPctOfMid: leg.markMid > 0 ? +((leg.markAsk - leg.markBid) / leg.markMid).toFixed(4) : null,
+    })),
+    midValue: midCloseValue, fillValue: proceeds, slippage: exitSlippageCost, fees: exitFees,
+  });
+  return { blocked: false, realizedPnl };
+}
+
+// Record a LIVE fill from a typed net dollar amount — the ONLY sanctioned way
+// live trades enter the record (hand-editing portfolio.json was the largest
+// corruption vector into the file everything else protects). The typed fill
+// vs the ticket's mid is also the paper-vs-live slippage calibration data the
+// go-live cutover decision needs.
+export function recordLiveFill(ticket, netFill, portfolio) {
+  const isCredit = ticket.netCredit != null;
+  const midValue = +ticket.legs.reduce((a, leg) => a + (leg.action === 'buy' ? leg.mid : -leg.mid) * leg.contracts * 100, 0).toFixed(2);
+  let entryValue, entryCredit, entrySlippageCost;
+  if (isCredit) {
+    entryCredit = +netFill.toFixed(2);
+    entrySlippageCost = +(ticket.netCredit - entryCredit).toFixed(2);
+    entryValue = +(ticket.width * 100 * ticket.legs[0].contracts - entryCredit).toFixed(2);
+  } else {
+    entryValue = +netFill.toFixed(2);
+    entryCredit = null;
+    entrySlippageCost = +(entryValue - midValue).toFixed(2);
+  }
+  const entryFees = feesFor(ticket.legs);
+  const position = {
+    id: ticket.id,
+    mode: 'live',
+    symbol: ticket.symbol,
+    structure: ticket.structure,
+    direction: ticket.direction,
+    score: ticket.score,
+    ivRegime: ticket.ivRegime,
+    legs: ticket.legs,
+    openedAt: new Date().toISOString(),
+    entryValue,
+    entryCredit,
+    maxLoss: isCredit ? entryValue : ticket.maxLoss,
+    maxGain: ticket.maxGain,
+    dteAtOpen: ticket.dte,
+    thesis: ticket.thesis,
+    spot: ticket.spot,
+    macro: ticket.macro ?? null,
+    earningsDate: ticket.earningsDate ?? null,
+    entrySlippageCost,
+    entryFees,
+    costModelVersion: 2,
+    currentValue: entryValue,
+    unrealizedPnl: 0,
+  };
+  portfolio.cash = +(portfolio.cash - entryValue - entryFees).toFixed(2);
+  portfolio.positions.push(position);
+  savePortfolio(portfolio);
+  appendExecLog({
+    ts: new Date().toISOString(), id: position.id, symbol: position.symbol,
+    structure: position.structure, mode: 'live', event: 'open', source: 'live-manual',
+    legs: ticket.legs.map((leg) => ({
+      action: leg.action, type: leg.type, strike: leg.strike, expiry: leg.expiry,
+      bid: leg.bid, ask: leg.ask, mid: leg.mid, fillPx: null,
+      spreadPctOfMid: leg.mid > 0 ? +((leg.ask - leg.bid) / leg.mid).toFixed(4) : null,
+    })),
+    midValue, fillValue: isCredit ? -entryCredit : entryValue, slippage: entrySlippageCost, fees: entryFees,
+  });
+  return position;
+}
+
+// Record a LIVE close from the typed net (proceeds received, or buyback cost
+// paid for a credit spread). Same math as closePositionPaper, real numbers.
+export function recordLiveClose(pos, netDollars, portfolio, reason) {
+  if (pos.mode !== 'live') {
+    return { blocked: true, reason: 'paper closes come only from the rules engine — record-close is for LIVE positions' };
+  }
+  const isCredit = pos.entryCredit != null;
+  const exitFees = feesFor(pos.legs);
+  const entryFeesPaid = pos.entryFees || 0;
+  let proceeds, realizedPnl;
+  if (isCredit) {
+    const closeCost = +netDollars.toFixed(2); // what you paid to buy the spread back
+    proceeds = +(pos.entryValue + pos.entryCredit - closeCost - exitFees).toFixed(2);
+    realizedPnl = +(pos.entryCredit - closeCost - entryFeesPaid - exitFees).toFixed(2);
+  } else {
+    proceeds = +(netDollars - exitFees).toFixed(2);
+    realizedPnl = +(proceeds - pos.entryValue - entryFeesPaid).toFixed(2);
+  }
+  const openedToday = etDay(pos.openedAt) === etDay();
+  portfolio.cash = +(portfolio.cash + proceeds).toFixed(2);
+  portfolio.positions = portfolio.positions.filter((p) => p.id !== pos.id);
+  portfolio.closed.push({
+    ...pos,
+    closedAt: new Date().toISOString(),
+    closeReason: `live: ${reason || 'manual close'}`,
+    realizedPnl,
+    exitSlippageCost: null, // real fill — no modeled slippage on the way out
+    exitFees,
+  });
+  if (openedToday) {
+    portfolio.dayTrades.push({ date: new Date().toISOString(), symbol: pos.symbol, id: pos.id });
+  }
+  savePortfolio(portfolio);
+  appendExecLog({
+    ts: new Date().toISOString(), id: pos.id, symbol: pos.symbol,
+    structure: pos.structure, mode: 'live', event: 'close', source: 'live-manual',
+    legs: pos.legs.map((leg) => ({
+      action: leg.action, type: leg.type, strike: leg.strike, expiry: leg.expiry,
+      bid: leg.markBid ?? null, ask: leg.markAsk ?? null, mid: leg.markMid ?? null, fillPx: null,
+      spreadPctOfMid: null,
+    })),
+    midValue: null, fillValue: proceeds, slippage: null, fees: exitFees,
+  });
   return { blocked: false, realizedPnl };
 }
 
@@ -246,17 +412,35 @@ export function settleExpiredBlind(pos, portfolio) {
   const allExpired = pos.legs.every((l) => new Date(`${l.expiry}T21:00:00Z`) < new Date());
   if (!allExpired) return { settled: false };
   // A LIVE position must never be settled locally — the broker may have
-  // auto-exercised it for real proceeds. Leave it in state so the caller's
-  // reconcile warning repeats every run until the real fill is recorded.
-  if (pos.mode === 'live') return { settled: false, liveExpired: true };
+  // auto-exercised it for real proceeds. Flag it for reconciliation and keep
+  // it in state so the warning repeats every run until the real fill is
+  // recorded via `record-close`.
+  if (pos.mode === 'live') {
+    pos.needsReconcile = true;
+    pos.reconcileFlaggedAt = pos.reconcileFlaggedAt ?? new Date().toISOString();
+    return { settled: false, liveExpired: true };
+  }
   portfolio.positions = portfolio.positions.filter((p) => p.id !== pos.id);
+  // Expired contracts incur no closing fee — reality, not flattery. Entry
+  // fees were real money and stay in the loss.
+  const realizedPnl = +(-(pos.entryValue + (pos.entryFees || 0))).toFixed(2);
   portfolio.closed.push({
     ...pos,
     closedAt: new Date().toISOString(),
     closeReason: 'expired without market data — settled conservatively at total loss',
-    realizedPnl: +(-pos.entryValue).toFixed(2),
+    realizedPnl,
     exitSlippageCost: null,
+    exitFees: 0,
   });
   savePortfolio(portfolio);
-  return { settled: true, realizedPnl: -pos.entryValue };
+  appendExecLog({
+    ts: new Date().toISOString(), id: pos.id, symbol: pos.symbol,
+    structure: pos.structure, mode: pos.mode, event: 'expire',
+    legs: pos.legs.map((leg) => ({
+      action: leg.action, type: leg.type, strike: leg.strike, expiry: leg.expiry,
+      bid: null, ask: null, mid: null, fillPx: 0, spreadPctOfMid: null,
+    })),
+    midValue: null, fillValue: 0, slippage: null, fees: 0,
+  });
+  return { settled: true, realizedPnl };
 }

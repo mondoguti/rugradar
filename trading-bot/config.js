@@ -52,6 +52,19 @@ export default {
       ['F', 'RIVN'],
     ],
     dailyLossLimitPct: 0.10,    // stop opening new trades after -10% day
+    // Drawdown governor — PRE-REGISTERED 2026-08-06 at trade #1, before the
+    // record could bias it. A pure de-risking overlay (can only REDUCE size
+    // and slots, never add): a multi-week bleed otherwise trips nothing —
+    // dailyLossLimitPct only sees same-day realized losses. Escalates
+    // immediately, releases only after near-full recovery (hysteresis).
+    drawdownGovernor: {
+      enabled: true,
+      rungs: [
+        { ddPct: 0.15, riskFactor: 0.5, slotPenalty: 1 },  // -15% off high-water: half risk, one fewer slot
+        { ddPct: 0.25, riskFactor: 0,   slotPenalty: 99 }, // -25%: new entries halted pending human review
+      ],
+      releaseAtRecoveryPct: 0.05, // disengage only once equity is back within 5% of the high-water
+    },
     pdt: {
       enabled: true,            // accounts under $25k: max 3 day trades per 5 trading days
       maxDayTrades: 3,
@@ -132,6 +145,18 @@ export default {
     maxHoldDays: 30,
   },
 
+  // Go-live gate — FROZEN 2026-08-06. The paper record must clear BOTH bars
+  // before any live order. Changing these numbers requires a written
+  // pre-registration note in the commit message (same convention as the
+  // marketRegimeFilter decision) — never a quiet edit because the record
+  // is "almost there". Gate state is read-only reporting: it must NEVER
+  // feed scan/sizing logic, or the bot could trade toward the quota.
+  goLive: {
+    minClosedTrades: 20,
+    minProfitFactor: 1.2,
+    frozenAt: '2026-08-06',
+  },
+
   // Robinhood options approval levels: Level 2 = long calls/puts only.
   // Level 3 adds spreads. User reports Level 3 approval (2026-08) — spreads
   // enabled so the paper record tests the full strategy, including selling
@@ -142,9 +167,15 @@ export default {
     canTradeSpreads: true,
   },
 
+  ops: {
+    runsPerWeekday: 2,          // scheduled cloud runs per weekday (morning autopilot + afternoon manage)
+  },
+
   data: {
     riskFreeRate: 0.04,         // used for Black-Scholes greeks fallback
     historyDays: 150,
     slippage: 0.25,             // paper fills assume you give up 25% of the half-spread
+    feePerContract: 0.04,       // regulatory/exchange fees per contract per side
+                                // (Robinhood is commission-free but passes these through)
   },
 };

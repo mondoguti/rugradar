@@ -113,6 +113,26 @@ Or drive it from Claude Code with the included commands:
 Offline/testing mode: `node trading-bot/fixtures/generate.js` then add
 `--fixtures` to any command to run against synthetic data.
 
+## How new signals earn their way in (the anti-overfitting protocol)
+
+The strategy's tunables are FROZEN — an overfitting post-mortem proved that
+re-tuning on backtests manufactures fake edges. New ideas follow one road:
+
+1. **Journal.** Every scan snapshots the vol surface (ATM IV near/far,
+   25-delta skew, term slope), realized-vol estimators, and flow proxies per
+   symbol into `data/iv-history.jsonl` — data money can't buy at this price,
+   accruing daily.
+2. **Label.** ~21 trading days later, each row gets its forward outcomes
+   (`data/outcomes.jsonl`): 5/10/21-day returns and realized vol (rv21).
+3. **Pre-register.** Every hypothesis lives in `data/pre-registrations.json`
+   (append-only) with its exact test, threshold, and minimum sample — written
+   BEFORE the data can answer. Rules may be withdrawn, never edited.
+4. **Evaluate forward.** `node trading-bot/src/index.js signals` reports each
+   rule as PASS / FAIL / INSUFFICIENT_DATA on forward data only.
+5. **Activate by hand.** A PASS is necessary, never sufficient: activation
+   requires a human commit flipping the named config flag and citing the rule
+   id. The evaluator itself can never change behavior.
+
 ## Going live (only after paper proves out)
 
 Checklist before the first real order:

@@ -66,6 +66,21 @@ export function historicalVol(closes, period = 20) {
   return Math.sqrt(variance) * Math.sqrt(252);
 }
 
+// Parkinson (high-low range) volatility, annualized. ~5x more statistically
+// efficient than close-to-close over the same window and computable from bars
+// we already fetch. Journal-only today: compared against hv20 on forward data
+// before either estimator earns a routing decision.
+export function parkinsonVol(bars, period = 20) {
+  if (bars.length < period) return null;
+  const slice = bars.slice(-period);
+  let sum = 0;
+  for (const b of slice) {
+    if (!(b.high > 0) || !(b.low > 0) || b.high < b.low) return null; // bad bar: refuse, don't guess
+    sum += Math.log(b.high / b.low) ** 2;
+  }
+  return Math.sqrt((252 / (4 * Math.log(2) * period)) * sum);
+}
+
 // Average dollar volume over the last `period` bars — liquidity proxy.
 export function avgDollarVolume(bars, period = 20) {
   if (bars.length < period) return null;

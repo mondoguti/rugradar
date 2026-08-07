@@ -2,17 +2,20 @@
 // signal with a 0-100 conviction score plus a volatility regime that decides
 // WHICH structure to trade (buy premium when it's cheap, sell it when rich).
 
-import { ema, emaSeries, rsi, atr, historicalVol, avgDollarVolume } from './indicators.js';
+import { ema, emaSeries, rsi, atr, historicalVol, avgDollarVolume, parkinsonVol } from './indicators.js';
 import { getDailyHistory, getOptionsChain } from './marketdata.js';
 import config from '../config.js';
 
 // ATM implied volatility: average IV of the call+put nearest the spot price
-// in the nearest monthly-ish expiry (21-45 DTE preferred).
-export function atmIV(chain) {
-  const candidates = chain.contracts.filter((c) => c.iv > 0 && c.dte >= 15 && c.dte <= 60);
+// in the nearest monthly-ish expiry (21-45 DTE preferred). The optional
+// window/target parameters serve the journal's term-structure snapshot
+// (e.g. [45,90] @ 67.5 for the far tenor) — defaults are IDENTICAL to the
+// original behavior, so live regime routing is untouched.
+export function atmIV(chain, dteWindow = [15, 60], targetDte30 = 30) {
+  const candidates = chain.contracts.filter((c) => c.iv > 0 && c.dte >= dteWindow[0] && c.dte <= dteWindow[1]);
   if (!candidates.length) return null;
   const targetDte = candidates.reduce(
-    (best, c) => (Math.abs(c.dte - 30) < Math.abs(best - 30) ? c.dte : best),
+    (best, c) => (Math.abs(c.dte - targetDte30) < Math.abs(best - targetDte30) ? c.dte : best),
     candidates[0].dte
   );
   const atExpiry = candidates.filter((c) => c.dte === targetDte);
@@ -83,6 +86,21 @@ export async function scanSymbol(symbol) {
   const bars = await getDailyHistory(symbol);
   const a = analyzeBars(bars);
   if (!a) return null;
+
+  // Realized-vol estimator diagnostics for the journal (never route trades):
+  // Parkinson vol and the percentile of today's hv20 within its own rolling
+  // history over the bars in hand.
+  a.hvP20 = parkinsonVol(bars, 20);
+  const closes = bars.map((b) => b.close);
+  const hvSeries = [];
+  for (let i = 21; i <= closes.length; i++) {
+    const v = historicalVol(closes.slice(0, i), 20);
+    if (v != null) hvSeries.push(v);
+  }
+  a.hvWindowBars = hvSeries.length;
+  a.hv20Pctile = hvSeries.length >= 100 && a.hv20 != null
+    ? +(hvSeries.filter((v) => v <= a.hv20).length / hvSeries.length).toFixed(3)
+    : null; // under 100 observations a percentile is noise — record null honestly
 
   let chain = null, iv = null, ivHv = null, regime = 'unknown';
   // Only pay for a chain fetch when the signal is worth structuring.

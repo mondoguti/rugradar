@@ -84,7 +84,7 @@ function buildLong(signal, riskBudget) {
 
   return {
     ...ticketBase(signal, `long_${type}`),
-    legs: [{ action: 'buy', type, expiry: leg.expiry, strike: leg.strike, contracts, mid: leg.mid, bid: leg.bid, ask: leg.ask, delta: leg.delta, iv: leg.iv, openInterest: leg.openInterest }],
+    legs: [{ action: 'buy', type, expiry: leg.expiry, strike: leg.strike, contracts, mid: leg.mid, bid: leg.bid, ask: leg.ask, delta: leg.delta, iv: leg.iv, gamma: leg.gamma ?? null, theta: leg.theta ?? null, vega: leg.vega ?? null, openInterest: leg.openInterest }],
     netDebit: +(leg.mid * contracts * 100).toFixed(2),
     maxLoss: +(leg.mid * contracts * 100).toFixed(2),
     plannedRisk: +(leg.mid * contracts * 100).toFixed(2),
@@ -152,12 +152,12 @@ function buildVertical(signal, riskBudget, kind) {
 
   const legs = kind === 'debit'
     ? [
-        { action: 'buy', type, expiry, strike: near.strike, contracts, mid: near.mid, bid: near.bid, ask: near.ask, delta: near.delta, iv: near.iv, openInterest: near.openInterest },
-        { action: 'sell', type, expiry, strike: far.strike, contracts, mid: far.mid, bid: far.bid, ask: far.ask, delta: far.delta, iv: far.iv, openInterest: far.openInterest },
+        { action: 'buy', type, expiry, strike: near.strike, contracts, mid: near.mid, bid: near.bid, ask: near.ask, delta: near.delta, iv: near.iv, gamma: near.gamma ?? null, theta: near.theta ?? null, vega: near.vega ?? null, openInterest: near.openInterest },
+        { action: 'sell', type, expiry, strike: far.strike, contracts, mid: far.mid, bid: far.bid, ask: far.ask, delta: far.delta, iv: far.iv, gamma: far.gamma ?? null, theta: far.theta ?? null, vega: far.vega ?? null, openInterest: far.openInterest },
       ]
     : [
-        { action: 'sell', type, expiry, strike: near.strike, contracts, mid: near.mid, bid: near.bid, ask: near.ask, delta: near.delta, iv: near.iv, openInterest: near.openInterest },
-        { action: 'buy', type, expiry, strike: far.strike, contracts, mid: far.mid, bid: far.bid, ask: far.ask, delta: far.delta, iv: far.iv, openInterest: far.openInterest },
+        { action: 'sell', type, expiry, strike: near.strike, contracts, mid: near.mid, bid: near.bid, ask: near.ask, delta: near.delta, iv: near.iv, gamma: near.gamma ?? null, theta: near.theta ?? null, vega: near.vega ?? null, openInterest: near.openInterest },
+        { action: 'buy', type, expiry, strike: far.strike, contracts, mid: far.mid, bid: far.bid, ask: far.ask, delta: far.delta, iv: far.iv, gamma: far.gamma ?? null, theta: far.theta ?? null, vega: far.vega ?? null, openInterest: far.openInterest },
       ];
 
   const structure = kind === 'debit'

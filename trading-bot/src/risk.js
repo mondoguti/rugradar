@@ -9,9 +9,27 @@ export function tierFor(eq) {
   return config.risk.tiers.find((t) => eq <= t.upToEquity) ?? config.risk.tiers[config.risk.tiers.length - 1];
 }
 
+// Drawdown-governor state, read from the persisted rung (stepped by
+// updateHighWater on every manage/autopilot run). Rung 0 = normal.
+export function governorState(portfolio) {
+  const g = config.risk.drawdownGovernor;
+  const rung = g?.enabled ? (portfolio.governorRung || 0) : 0;
+  const eq = equity(portfolio);
+  const hw = portfolio.equityHighWater || portfolio.startingEquity;
+  return {
+    rung,
+    dd: hw > 0 ? Math.max(0, 1 - eq / hw) : 0,
+    highWater: hw,
+    riskFactor: rung > 0 ? g.rungs[rung - 1].riskFactor : 1,
+    slotPenalty: rung > 0 ? g.rungs[rung - 1].slotPenalty : 0,
+  };
+}
+
 export function riskBudget(portfolio) {
   const eq = equity(portfolio);
-  return eq * tierFor(eq).riskPct;
+  // The governor can only SHRINK the budget — a pre-registered harm-reduction
+  // overlay, never a source of extra size.
+  return eq * tierFor(eq).riskPct * governorState(portfolio).riskFactor;
 }
 
 // Rolling day-trade count over the PDT window (5 trading days ~ 7 calendar days).
@@ -38,9 +56,14 @@ export function validateTicket(ticket, portfolio) {
   const cost = ticket.netDebit ?? ticket.maxLoss; // credit spreads tie up collateral = maxLoss
   if (cost > portfolio.cash) failures.push(`cost $${cost} exceeds cash $${portfolio.cash.toFixed(2)}`);
 
-  const maxPositions = tierFor(eq).maxPositions;
+  const gov = governorState(portfolio);
+  if (gov.riskFactor === 0) {
+    failures.push(`drawdown circuit breaker: ${(gov.dd * 100).toFixed(0)}% off high-water ${gov.highWater.toFixed(0)} — new entries halted pending human review`);
+  }
+
+  const maxPositions = Math.max(0, tierFor(eq).maxPositions - gov.slotPenalty);
   if (portfolio.positions.length >= maxPositions)
-    failures.push(`already at max open positions (${maxPositions} at this equity tier)`);
+    failures.push(`already at max open positions (${maxPositions} at this equity tier${gov.slotPenalty ? `, reduced by the drawdown governor` : ''})`);
 
   if (portfolio.positions.some((p) => p.symbol === ticket.symbol))
     failures.push(`already have an open position in ${ticket.symbol}`);

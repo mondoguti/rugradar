@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { bsDelta } from './bs.js';
+import { bsDelta, bsGamma, bsVega, bsTheta } from './bs.js';
 import config from '../config.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -174,6 +174,11 @@ async function chainFromCboe(symbol) {
       openInterest: o.open_interest ?? 0,
       iv: o.iv ?? null,
       delta: o.delta ?? null,
+      // CBOE ships real greeks — capture instead of discarding them.
+      gamma: o.gamma ?? null,
+      theta: o.theta ?? null,
+      vega: o.vega ?? null,
+      theo: o.theo ?? null,
     });
   }
   return { symbol, spot, updatedAt: new Date().toISOString(), contracts };
@@ -213,26 +218,37 @@ async function chainFromYahoo(symbol) {
   return { symbol, spot, updatedAt: new Date().toISOString(), contracts };
 }
 
+// Fill missing greeks via Black-Scholes so strike selection and book
+// exposure always work (Yahoo and fixture chains carry no greeks). Applied
+// on EVERY path — network, cache, and fixtures.
+function fillGreeks(chain) {
+  const r = config.data.riskFreeRate;
+  for (const c of chain.contracts) {
+    if (!c.iv) continue;
+    const p = { type: c.type, spot: chain.spot, strike: c.strike, dte: c.dte, iv: c.iv, r };
+    if (c.delta == null) c.delta = bsDelta(p);
+    if (c.gamma == null) c.gamma = bsGamma(p);
+    if (c.vega == null) c.vega = bsVega(p);
+    if (c.theta == null) c.theta = bsTheta(p);
+  }
+  return chain;
+}
+
 export async function getOptionsChain(symbol) {
   if (useFixtures()) {
     const f = path.join(FIXTURES_DIR, `${symbol}.chain.json`);
     if (!fs.existsSync(f)) throw new Error(`no fixture chain for ${symbol} — run: node trading-bot/fixtures/generate.js`);
-    return JSON.parse(fs.readFileSync(f, 'utf8'));
+    return fillGreeks(JSON.parse(fs.readFileSync(f, 'utf8')));
   }
   const cached = cacheGet(`chain-${symbol}`);
-  if (cached) return cached;
+  if (cached) return fillGreeks(cached);
   let chain;
   try {
     chain = await chainFromCboe(symbol);
   } catch {
     chain = await chainFromYahoo(symbol);
   }
-  // Fill missing deltas via Black-Scholes so strike selection always works.
-  for (const c of chain.contracts) {
-    if (c.delta == null && c.iv) {
-      c.delta = bsDelta({ type: c.type, spot: chain.spot, strike: c.strike, dte: c.dte, iv: c.iv, r: config.data.riskFreeRate });
-    }
-  }
+  fillGreeks(chain);
   cacheSet(`chain-${symbol}`, chain);
   return chain;
 }

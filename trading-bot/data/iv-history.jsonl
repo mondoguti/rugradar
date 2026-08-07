@@ -73,3 +73,4 @@
 {"date":"2026-08-06","symbol":"SNAP","close":5.79,"hv20":0.624,"atmIV":0.9681,"ivOverHv":1.552}
 {"date":"2026-08-06","symbol":"UBER","close":71.99,"hv20":0.319,"atmIV":0.473,"ivOverHv":1.483}
 {"date":"2026-08-06","symbol":"CCL","close":29.59,"hv20":0.3793,"atmIV":0.4268,"ivOverHv":1.125}
+{"date":"2026-08-06","symbol":"WOLF","close":25.19,"hv20":1.2606,"atmIV":1.3324,"ivOverHv":1.057,"ivPut25":1.3084,"ivCall25":1.4433,"rr25":-0.1349,"rr25Norm":-0.101,"atmIvFar":1.3599,"termSlope":0.0275,"hvP20":0.9117,"hv20Pctile":0.623,"hvWindowBars":130,"adv20":109937515,"pcVolRatio":0.365,"volOiRatio":0.053,"optDollarVol":2667000,"dFomc":41,"dCpi":6,"snapshot":"open","partialDay":true}
