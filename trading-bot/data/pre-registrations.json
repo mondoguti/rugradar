@@ -96,6 +96,7 @@
     "test": "manual_review",
     "evidenceRequired": "At least 120 calendar days of bestCreditFracPut/Call observations across the journal universe. Review: per-symbol median achievable fraction, and the fraction of rich-regime days on which ANY symbol cleared 0.25. If the floor is confirmed structurally out of reach while VRP evidence (vrp-credit-gate observations) stays supportive, the owner MAY commit a revised floor and/or maxSpreadWidth — with the new values justified in the commit from this forward series, never from a backtest — and ONLY at equity >= $8,000 where ~$400 budgets make wider wings honestly sizeable.",
     "activates": "Nothing automatically. This rule exists to start the evidence clock and to bind any future change of minCreditFractionOfWidth / maxSpreadWidth to forward data plus an explicit owner commit citing this id.",
+    "seriesNote": "gateMetrics semantics v2 from 2026-08-11 (rows carry metricsVersion:2): expiry selection and liquidity now reuse the frozen builders' own pickExpiry/liquid, fixing a v1 drift that flipped ~21% of floor verdicts. No v1 gateMetrics rows were ever journaled (the field shipped 2026-08-07 after that day's scan), so the series is homogeneous — the evidence clock runs on v2 rows only.",
     "status": "journaling"
   },
   {

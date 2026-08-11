@@ -34,9 +34,12 @@ export function riskBudget(portfolio) {
 }
 
 // Rolling day-trade count over the PDT window, in ACTUAL trading days —
-// FINRA counts business days, and the old 5x1.4-calendar-day approximation
-// released day trades early around holidays (a flattering gap vs the real
-// broker rule).
+// FINRA counts business days. Vs the old 5x1.4-calendar-day approximation
+// this is MORE conservative around holidays (the old code could release
+// after as few as 4 trading days) but business-day-granular: a slot frees at
+// ET midnight of the 5th-trading-day anniversary rather than at the old
+// stamp+7d moment — up to ~15h earlier in clock time on holiday-free weeks
+// (FINRA-consistent; disclosed in the README record-integrity section).
 export function dayTradesInWindow(portfolio, now = new Date()) {
   const today = etDay(now);
   return portfolio.dayTrades.filter((d) => tradingDaysBetween(etDay(new Date(d.date)), today) < config.risk.pdt.windowDays).length;

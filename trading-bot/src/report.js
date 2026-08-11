@@ -73,13 +73,20 @@ export function shadowPerformance(portfolio) {
     extras.set(e.id, (extras.get(e.id) || 0) + e.shadow.extraCostAt50);
   }
   if (!extras.size) return null;
+  const closedIds = new Set(portfolio.closed.map((t) => t.id));
+  // Honest blend: trades without shadow entries (pre-telemetry v1 fills)
+  // enter at recorded P&L — the caller labels that.
   const shadowPnls = portfolio.closed.map((t) => t.realizedPnl - (extras.get(t.id) || 0));
   const gw = shadowPnls.filter((p) => p > 0).reduce((a, p) => a + p, 0);
   const gl = Math.abs(shadowPnls.filter((p) => p <= 0).reduce((a, p) => a + p, 0));
+  let closedFriction = 0, openFriction = 0;
+  for (const [id, v] of extras) (closedIds.has(id) ? (closedFriction += v) : (openFriction += v));
   return {
-    tradesWithShadow: [...extras.keys()].filter((id) => portfolio.closed.some((t) => t.id === id)).length,
+    closedTrades: portfolio.closed.length,
+    tradesWithShadow: [...extras.keys()].filter((id) => closedIds.has(id)).length,
     shadowProfitFactor: gl > 0 ? +(gw / gl).toFixed(2) : null,
-    extraFrictionTotal: +[...extras.values()].reduce((a, v) => a + v, 0).toFixed(2),
+    extraFrictionClosed: +closedFriction.toFixed(2),
+    extraFrictionOpenPositions: +openFriction.toFixed(2),
   };
 }
 

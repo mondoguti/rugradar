@@ -82,7 +82,7 @@ export function analyzeBars(bars) {
   return { ...base, direction: bullish ? 'bullish' : 'bearish', score: Math.min(score, 100), reasons };
 }
 
-export async function scanSymbol(symbol) {
+export async function scanSymbol(symbol, { chains = true } = {}) {
   const bars = await getDailyHistory(symbol);
   const a = analyzeBars(bars);
   if (!a) return null;
@@ -104,7 +104,9 @@ export async function scanSymbol(symbol) {
 
   let chain = null, iv = null, ivHv = null, regime = 'unknown';
   // Only pay for a chain fetch when the signal is worth structuring.
-  if (a.direction !== 'neutral' && a.score >= config.entries.minScore - 15) {
+  // chains:false (journal-only pass) skips it entirely — the bounded de-bias
+  // loop fetches those chains later under its own deadline and outage abort.
+  if (chains && a.direction !== 'neutral' && a.score >= config.entries.minScore - 15) {
     chain = await getOptionsChain(symbol);
     iv = atmIV(chain);
     if (iv && a.hv20 > 0) {
@@ -134,12 +136,19 @@ export async function marketRegime() {
   } catch { return 'neutral'; }
 }
 
-export async function scanUniverse(universe = config.universe) {
+export async function scanUniverse(universe = config.universe, { deadline = null, chains = true } = {}) {
   const results = [];
   const errors = [];
   for (const symbol of universe) {
+    // Optional wall-clock bound for best-effort passes (journal-only names):
+    // a degraded feed must never turn a telemetry sweep into an unbounded
+    // stall of the scheduled run. The trading-path call passes no deadline.
+    if (deadline != null && Date.now() > deadline) {
+      errors.push({ symbol, error: 'skipped: scan deadline exhausted' });
+      continue;
+    }
     try {
-      const s = await scanSymbol(symbol);
+      const s = await scanSymbol(symbol, { chains });
       if (s) results.push(s);
     } catch (e) {
       errors.push({ symbol, error: e.message });

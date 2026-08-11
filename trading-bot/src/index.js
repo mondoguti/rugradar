@@ -192,22 +192,28 @@ async function cmdScan() {
     fs.mkdirSync(path.dirname(jf), { recursive: true });
     const today = etDay(); // market day, not UTC day — a late-UTC run must not roll the date
     const existing = fs.existsSync(jf) ? fs.readFileSync(jf, 'utf8') : '';
-    // Journal-only symbols: recorded daily, NEVER traded (config.journalUniverse).
+    // Journal-only symbols: recorded daily, NEVER traded (config.journalUniverse
+    // — and universe.js excludes them from discovery, so they cannot sneak into
+    // the tradeable scan via a trending list either).
     // INVARIANT: extraResults must never merge into `results` — the trading
     // path (candidates filter above) reads `results` and stays byte-identical.
+    // The deadline is created FIRST and covers the extras scan too: history
+    // fetches for 25 cold names on a degraded-feed day must never stall the
+    // scheduled run (chains for extras are deferred to the bounded de-bias
+    // loop below via chains:false).
     const extraSyms = (config.journalUniverse || []).filter((x) => !universe.includes(x));
-    const { results: extraResults } = extraSyms.length ? await scanUniverse(extraSyms) : { results: [] };
+    const deadline = Date.now() + (extraSyms.length ? 240_000 : 90_000);
+    const { results: extraResults, errors: extraErrors } = extraSyms.length
+      ? await scanUniverse(extraSyms, { deadline, chains: false })
+      : { results: [], errors: [] };
+    for (const e of extraErrors) console.error(`  ! journal-only ${e.symbol}: ${e.error}`);
     const journalResults = [...results, ...extraResults];
     const inJournalSet = new Set([...config.universe, ...(config.journalUniverse || [])]);
     // De-bias the dataset: the scanner only fetches chains for signal-worthy
     // symbols, which would record IV only on interesting days (selection
     // bias). For journal members, fetch the chain regardless so every symbol
-    // gets a daily observation. Cache makes repeats cheap.
-    // Bounded: a feed outage must not turn this best-effort pass into a
-    // serial retry marathon — wall-clock budget (larger when the journal-only
-    // list adds ~25 throttled fetches), and three consecutive failures reads
-    // as an upstream outage (one outage hits every symbol).
-    const deadline = Date.now() + (extraSyms.length ? 240_000 : 90_000);
+    // gets a daily observation. Cache makes repeats cheap. Three consecutive
+    // failures reads as an upstream outage (one outage hits every symbol).
     let misses = 0;
     for (const s of journalResults) {
       if (s.atmIV != null || !(s.hv20 > 0) || !inJournalSet.has(s.symbol)) continue;
@@ -445,7 +451,7 @@ async function cmdReport() {
   const { shadowPerformance } = await import('./report.js');
   const sp = shadowPerformance(portfolio);
   if (sp && sp.tradesWithShadow > 0) {
-    console.log(`Shadow PF at 50%-of-half-spread fills: ${sp.shadowProfitFactor ?? '—'} over ${sp.tradesWithShadow} trade(s) (telemetry only — the gate reads recorded P&L). If shadow PF diverges hard from recorded PF, the slippage assumption is doing the earning.`);
+    console.log(`Shadow PF at 50%-of-half-spread fills: ${sp.shadowProfitFactor ?? '—'} over all ${sp.closedTrades} closed trade(s), ${sp.tradesWithShadow} shadow-adjusted (pre-telemetry trades enter at recorded P&L; telemetry only — the gate reads recorded P&L). If shadow PF diverges hard from recorded PF, the slippage assumption is doing the earning.`);
   }
 
   // --detail: the verdict-day breakdowns — which scores, regimes, and

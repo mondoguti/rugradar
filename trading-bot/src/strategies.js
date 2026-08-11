@@ -9,7 +9,7 @@
 import crypto from 'node:crypto';
 import config from '../config.js';
 
-function liquid(c) {
+export function liquid(c) {
   const L = config.entries.liquidity;
   if (!c.mid || c.bid < L.minBid) return false;
   if (c.openInterest < L.minOpenInterest) return false;
@@ -19,7 +19,7 @@ function liquid(c) {
 
 // Pick the expiry (among liquid contracts of the right type) whose DTE is
 // closest to the middle of the allowed window.
-function pickExpiry(contracts, [minDte, maxDte]) {
+export function pickExpiry(contracts, [minDte, maxDte]) {
   const target = (minDte + maxDte) / 2;
   const expiries = [...new Set(contracts.filter((c) => c.dte >= minDte && c.dte <= maxDte).map((c) => c.expiry))];
   if (!expiries.length) return null;

@@ -146,6 +146,12 @@ re-tuning on backtests manufactures fake edges. New ideas follow one road:
 - Tier boundary wrinkle for gate-pace planning: the per-trade budget is $375
   at exactly $5,000 equity (7.5% tier) but drops to $250 at $5,001 (5% tier),
   regaining $375 only at $7,500 — target ~$7,500, not $5,000.
+- PDT semantics change (effective 2026-08-07): the day-trade window now
+  counts actual NYSE trading days (FINRA's rule) instead of 7.0 calendar
+  days. More conservative around holidays; business-day-granular otherwise —
+  a slot can free up to ~15h earlier in clock time than the old
+  millisecond-precise window on holiday-free weeks. The record holds zero day
+  trades at the changeover, so nothing changed retroactively.
 
 Checklist before the first real order:
 - [ ] 20+ paper trades logged, `report` shows positive expectancy (profit factor > 1.2)

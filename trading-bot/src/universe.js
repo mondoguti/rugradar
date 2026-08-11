@@ -54,7 +54,11 @@ export async function discoverUniverse() {
     fetchScreener('small_cap_gainers'), // the "up and coming" names before they're famous
   ]);
 
-  const seen = new Set(base);
+  // Seed the dedupe set with journal-only names too: they are journaled daily
+  // by design but must NEVER enter the tradeable universe via discovery —
+  // promotion to trading is an owner commit, not a trending list. This can
+  // only REMOVE potential trades (harm-reduction, freeze-compatible).
+  const seen = new Set([...base, ...(config.journalUniverse || [])]);
   const discovered = [];
   // interleave sources so one noisy list doesn't dominate
   const sources = [actives, gainers, losers, smallCaps, trending];

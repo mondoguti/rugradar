@@ -26,9 +26,11 @@ export const MACRO_2026 = {
   cpi: ['2026-01-13', '2026-02-13', '2026-03-11', '2026-04-10', '2026-05-12', '2026-06-10', '2026-07-14', '2026-08-12', '2026-09-11'],
 };
 
-// 2026 US market holidays (NYSE full closures), for trading-day arithmetic.
-// Verified against the published NYSE calendar at implementation time.
-export const MARKET_HOLIDAYS_2026 = new Set([
+// US market holidays (NYSE full closures), for trading-day arithmetic.
+// Verified against the published NYSE calendar (2026) and the deterministic
+// observance rules (2027: Jul 4 Sunday -> Mon Jul 5; Jun 19 and Dec 25
+// Saturdays -> preceding Fridays).
+export const MARKET_HOLIDAYS = new Set([
   '2026-01-01', // New Year's Day
   '2026-01-19', // MLK Day
   '2026-02-16', // Presidents' Day
@@ -39,18 +41,31 @@ export const MARKET_HOLIDAYS_2026 = new Set([
   '2026-09-07', // Labor Day
   '2026-11-26', // Thanksgiving
   '2026-12-25', // Christmas
+  '2027-01-01', // New Year's Day
+  '2027-01-18', // MLK Day
+  '2027-02-15', // Presidents' Day
+  '2027-03-26', // Good Friday
+  '2027-05-31', // Memorial Day
+  '2027-06-18', // Juneteenth (observed — Jun 19 is a Saturday)
+  '2027-07-05', // Independence Day (observed — Jul 4 is a Sunday)
+  '2027-09-06', // Labor Day
+  '2027-11-25', // Thanksgiving
+  '2027-12-24', // Christmas (observed — Dec 25 is a Saturday)
 ]);
-const HOLIDAY_COVERAGE_END = '2026-12-31';
+const HOLIDAY_COVERAGE_END = '2027-12-31';
 
 const isTradingDay = (isoDay) => {
   const dow = new Date(`${isoDay}T12:00:00Z`).getUTCDay();
-  return dow >= 1 && dow <= 5 && !MARKET_HOLIDAYS_2026.has(isoDay);
+  return dow >= 1 && dow <= 5 && !MARKET_HOLIDAYS.has(isoDay);
 };
 
 // Trading days in (fromEtDay, toEtDay]: same day -> 0, next business day -> 1.
-// Beyond holiday coverage, non-listed weekdays count as trading days (the
-// conservative direction for PDT: counting more days keeps trades in the
-// window LONGER, never releasing a day trade early).
+// PAST HOLIDAY COVERAGE the failure direction is FLATTERING: an unlisted
+// holiday gets counted as a trading day, which INFLATES the elapsed count and
+// releases PDT day trades EARLY vs the real FINRA counter. That makes the
+// coverageWarnings nag load-bearing, not belt-and-suspenders — extend
+// MARKET_HOLIDAYS before coverage runs out. (The PDT window also looks ~1.5
+// weeks past a trade date, so coverage effectively ends that much sooner.)
 export function tradingDaysBetween(fromEtDay, toEtDay) {
   if (toEtDay <= fromEtDay) return 0;
   let count = 0;
@@ -90,9 +105,11 @@ export function coverageWarnings(from = etDay()) {
       warnings.push(`macro calendar: ${type.toUpperCase()} coverage ends ${last} (${daysLeft}d away) — verify the next dates against the primary source and extend MACRO_2026 in src/calendar.js`);
     }
   }
+  // 75d lead: 60d notice plus the PDT window's ~1.5-week forward lookahead
+  // (late-in-coverage trade dates are evaluated against days past the end).
   const holidayDaysLeft = Math.round((new Date(HOLIDAY_COVERAGE_END) - new Date(from)) / 86400000);
-  if (holidayDaysLeft <= 60) {
-    warnings.push(`market-holiday calendar ends ${HOLIDAY_COVERAGE_END} (${holidayDaysLeft}d away) — add the next year's NYSE holidays to MARKET_HOLIDAYS in src/calendar.js`);
+  if (holidayDaysLeft <= 75) {
+    warnings.push(`market-holiday calendar ends ${HOLIDAY_COVERAGE_END} (${holidayDaysLeft}d away; PDT windows reach past it ~11 days sooner) — add the next year's NYSE holidays to MARKET_HOLIDAYS in src/calendar.js`);
   }
   return warnings;
 }
