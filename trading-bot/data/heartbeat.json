@@ -1,10 +1,10 @@
 {
-  "lastRunAt": "2026-08-12T19:46:12.225Z",
+  "lastRunAt": "2026-08-13T19:47:09.279Z",
   "equity": 2005,
   "openPositions": 0,
-  "cmd": "manage",
-  "lastScanAt": "2026-08-12T14:52:07.580Z",
-  "lastManageAt": "2026-08-12T19:46:12.225Z",
+  "cmd": "autopilot",
+  "lastScanAt": "2026-08-13T19:47:09.279Z",
+  "lastManageAt": "2026-08-13T19:47:09.279Z",
   "bookGreeks": {
     "netDeltaDollars": -5696.16,
     "netThetaPerDay": -6.42,
