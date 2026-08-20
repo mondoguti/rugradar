@@ -1,6 +1,6 @@
 # Trading Bot — Owner Digest
 
-_Auto-generated 2026-08-19T14:52:44.149Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
+_Auto-generated 2026-08-20T14:51:57.057Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
 
 ## Your account
 
@@ -23,9 +23,10 @@ Friction is the silent killer of small accounts; the bot models it pessimistical
 
 ## System health
 
-Last scheduled run: 2026-08-19T14:52:44.146Z (autopilot).
-Research dataset: 271 daily volatility snapshots collected so far (grows every scan; becomes tradeable evidence at ~120 days).
+Last scheduled run: 2026-08-20T14:51:57.053Z (autopilot).
+Research dataset: 289 daily volatility snapshots collected so far (grows every scan; becomes tradeable evidence at ~120 days).
 
 ## Needs your attention
 
-Nothing right now.
+- Ticket **BAC** is HELD until someone verifies the earnings date: if earnings land before 2026-09-25, discard it; otherwise set it back to "pending".
+- Ticket **GM** is HELD until someone verifies the earnings date: if earnings land before 2026-09-18, discard it; otherwise set it back to "pending".

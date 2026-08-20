@@ -1,1 +1,132 @@
-[]
+[
+  {
+    "id": "53697fca",
+    "createdAt": "2026-08-20T14:51:12.315Z",
+    "symbol": "BAC",
+    "spot": 63.17,
+    "direction": "bullish",
+    "score": 96,
+    "ivRegime": "normal",
+    "structure": "call_debit_spread",
+    "status": "executed_paper",
+    "thesis": "uptrend, EMA separation 2.38 ATR, slope confirmed; RSI 56; good entry: 0.2 ATR from EMA20",
+    "legs": [
+      {
+        "action": "buy",
+        "type": "call",
+        "expiry": "2026-09-25",
+        "strike": 63,
+        "contracts": 3,
+        "mid": 1.5499999999999998,
+        "bid": 1.47,
+        "ask": 1.63,
+        "delta": 0.5172,
+        "iv": 0.1954,
+        "gamma": 0.1019,
+        "theta": -0.0221,
+        "vega": 0.0786,
+        "openInterest": 230
+      },
+      {
+        "action": "sell",
+        "type": "call",
+        "expiry": "2026-09-25",
+        "strike": 64,
+        "contracts": 3,
+        "mid": 1.08,
+        "bid": 1.01,
+        "ask": 1.15,
+        "delta": 0.4156,
+        "iv": 0.1913,
+        "gamma": 0.1005,
+        "theta": -0.021,
+        "vega": 0.0771,
+        "openInterest": 112
+      }
+    ],
+    "width": 1,
+    "netDebit": 141,
+    "maxLoss": 141,
+    "plannedRisk": 141,
+    "maxGain": 159,
+    "dte": 36,
+    "validation": {
+      "ok": true,
+      "failures": [],
+      "warnings": [
+        "earnings date unknown — VERIFY manually before executing (no long premium through earnings)"
+      ]
+    },
+    "earningsDate": null,
+    "macro": {
+      "nextFomc": "2026-09-16",
+      "nextCpi": "2026-09-11",
+      "fomcBeforeExpiry": true
+    }
+  },
+  {
+    "id": "aedfecc7",
+    "createdAt": "2026-08-20T14:51:13.457Z",
+    "symbol": "GM",
+    "spot": 84.96,
+    "direction": "bullish",
+    "score": 78,
+    "ivRegime": "normal",
+    "structure": "call_debit_spread",
+    "status": "executed_paper",
+    "thesis": "uptrend, EMA separation 1.03 ATR, slope confirmed; RSI 51; good entry: 0.2 ATR from EMA20",
+    "legs": [
+      {
+        "action": "buy",
+        "type": "call",
+        "expiry": "2026-09-18",
+        "strike": 85,
+        "contracts": 1,
+        "mid": 2.62,
+        "bid": 2.58,
+        "ask": 2.66,
+        "delta": 0.4885,
+        "iv": 0.3018,
+        "gamma": 0.0549,
+        "theta": -0.0486,
+        "vega": 0.095,
+        "openInterest": 4120
+      },
+      {
+        "action": "sell",
+        "type": "call",
+        "expiry": "2026-09-18",
+        "strike": 87.5,
+        "contracts": 1,
+        "mid": 1.655,
+        "bid": 1.6,
+        "ask": 1.71,
+        "delta": 0.3564,
+        "iv": 0.3019,
+        "gamma": 0.0518,
+        "theta": -0.0453,
+        "vega": 0.089,
+        "openInterest": 3306
+      }
+    ],
+    "width": 2.5,
+    "netDebit": 96.5,
+    "maxLoss": 96.5,
+    "plannedRisk": 96.5,
+    "maxGain": 153.5,
+    "dte": 29,
+    "validation": {
+      "ok": true,
+      "failures": [],
+      "warnings": [
+        "earnings date unknown — VERIFY manually before executing (no long premium through earnings)"
+      ]
+    },
+    "earningsDate": null,
+    "macro": {
+      "nextFomc": "2026-09-16",
+      "nextCpi": "2026-09-11",
+      "fomcBeforeExpiry": true
+    }
+  }
+]
