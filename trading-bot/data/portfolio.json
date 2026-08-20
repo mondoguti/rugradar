@@ -26,7 +26,15 @@
           "gamma": 0.1019,
           "theta": -0.0221,
           "vega": 0.0786,
-          "openInterest": 230
+          "openInterest": 230,
+          "markBid": 1.16,
+          "markAsk": 1.26,
+          "markMid": 1.21,
+          "markClosePx": 1.1975,
+          "markDelta": 0.4292,
+          "markIv": 0.2041,
+          "markTheta": -0.0211,
+          "markVega": 0.0763
         },
         {
           "action": "sell",
@@ -42,7 +50,15 @@
           "gamma": 0.1005,
           "theta": -0.021,
           "vega": 0.0771,
-          "openInterest": 112
+          "openInterest": 112,
+          "markBid": 0.78,
+          "markAsk": 0.86,
+          "markMid": 0.8200000000000001,
+          "markClosePx": 0.83,
+          "markDelta": 0.3315,
+          "markIv": 0.1994,
+          "markTheta": -0.0192,
+          "markVega": 0.0708
         }
       ],
       "openedAt": "2026-08-20T14:53:17.173Z",
@@ -62,8 +78,15 @@
       "entrySlippageCost": 11.25,
       "entryFees": 0.24,
       "costModelVersion": 2,
-      "currentValue": 152.25,
-      "unrealizedPnl": 0
+      "currentValue": 117,
+      "unrealizedPnl": -35.25,
+      "exitValue": 110.25,
+      "peakPnl": 0,
+      "markFailures": 0,
+      "markStale": false,
+      "spotAtMark": 62.175,
+      "dte": 36,
+      "markedAt": "2026-08-20T19:46:31.077Z"
     },
     {
       "id": "aedfecc7",
@@ -88,7 +111,15 @@
           "gamma": 0.0549,
           "theta": -0.0486,
           "vega": 0.095,
-          "openInterest": 4120
+          "openInterest": 4120,
+          "markBid": 3.05,
+          "markAsk": 3.25,
+          "markMid": 3.15,
+          "markClosePx": 3.125,
+          "markDelta": 0.543,
+          "markIv": 0.3036,
+          "markTheta": -0.0482,
+          "markVega": 0.0956
         },
         {
           "action": "sell",
@@ -104,7 +135,15 @@
           "gamma": 0.0518,
           "theta": -0.0453,
           "vega": 0.089,
-          "openInterest": 3306
+          "openInterest": 3306,
+          "markBid": 1.93,
+          "markAsk": 2.11,
+          "markMid": 2.02,
+          "markClosePx": 2.0425,
+          "markDelta": 0.4068,
+          "markIv": 0.3003,
+          "markTheta": -0.0469,
+          "markVega": 0.0936
         }
       ],
       "openedAt": "2026-08-20T14:53:17.175Z",
@@ -124,8 +163,15 @@
       "entrySlippageCost": 2.38,
       "entryFees": 0.08,
       "costModelVersion": 2,
-      "currentValue": 98.88,
-      "unrealizedPnl": 0
+      "currentValue": 113,
+      "unrealizedPnl": 14.12,
+      "exitValue": 108.25,
+      "peakPnl": 14.12,
+      "markFailures": 0,
+      "markStale": false,
+      "spotAtMark": 85.325,
+      "dte": 29,
+      "markedAt": "2026-08-20T19:46:31.277Z"
     }
   ],
   "closed": [

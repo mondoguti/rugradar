@@ -1,11 +1,12 @@
 # Trading Bot — Owner Digest
 
-_Auto-generated 2026-08-20T14:51:57.057Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
+_Auto-generated 2026-08-20T19:46:31.324Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
 
 ## Your account
 
-Your paper account is worth **$2005.00** (started at $2000.00, up 0.25%).
-No positions are open — the bot only trades when its rules are satisfied. Sitting out IS a strategy.
+Your paper account is worth **$1983.55** (started at $2000.00, down 0.82%).
+- **BAC**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $152.25, now marked at $117.00 (down $35.25).
+- **GM**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $98.88, now marked at $113.00 (up $14.12).
 
 ## Recent trades (last 10)
 
@@ -23,10 +24,9 @@ Friction is the silent killer of small accounts; the bot models it pessimistical
 
 ## System health
 
-Last scheduled run: 2026-08-20T14:51:57.053Z (autopilot).
+Last scheduled run: 2026-08-20T19:46:31.315Z (manage).
 Research dataset: 289 daily volatility snapshots collected so far (grows every scan; becomes tradeable evidence at ~120 days).
 
 ## Needs your attention
 
-- Ticket **BAC** is HELD until someone verifies the earnings date: if earnings land before 2026-09-25, discard it; otherwise set it back to "pending".
-- Ticket **GM** is HELD until someone verifies the earnings date: if earnings land before 2026-09-18, discard it; otherwise set it back to "pending".
+Nothing right now.
