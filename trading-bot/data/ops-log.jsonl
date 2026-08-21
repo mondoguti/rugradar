@@ -17,3 +17,4 @@
 {"ts":"2026-08-20T14:51:57.057Z","cmd":"autopilot","ok":true,"durationMs":56693,"equity":2005,"openPositions":0}
 {"ts":"2026-08-20T19:46:31.325Z","cmd":"manage","ok":true,"durationMs":740,"equity":1983.55,"openPositions":2}
 {"ts":"2026-08-21T14:52:09.646Z","cmd":"autopilot","ok":true,"durationMs":62095,"equity":1999.55,"openPositions":2}
+{"ts":"2026-08-21T19:46:16.943Z","cmd":"manage","ok":true,"durationMs":1359,"equity":1937.06,"openPositions":3}
