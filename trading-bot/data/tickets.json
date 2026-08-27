@@ -1,1 +1,67 @@
-[]
+[
+  {
+    "id": "53744061",
+    "createdAt": "2026-08-27T14:51:51.083Z",
+    "symbol": "KO",
+    "spot": 90.08,
+    "direction": "bullish",
+    "score": 78,
+    "ivRegime": "normal",
+    "structure": "call_debit_spread",
+    "status": "executed_paper",
+    "thesis": "uptrend, EMA separation 1.77 ATR, slope confirmed; RSI 61",
+    "legs": [
+      {
+        "action": "buy",
+        "type": "call",
+        "expiry": "2026-09-25",
+        "strike": 90,
+        "contracts": 1,
+        "mid": 1.48,
+        "bid": 1.43,
+        "ask": 1.53,
+        "delta": 0.4733,
+        "iv": 0.173,
+        "gamma": 0.0978,
+        "theta": -0.0315,
+        "vega": 0.0984,
+        "openInterest": 421
+      },
+      {
+        "action": "sell",
+        "type": "call",
+        "expiry": "2026-09-25",
+        "strike": 92,
+        "contracts": 1,
+        "mid": 0.73,
+        "bid": 0.68,
+        "ask": 0.78,
+        "delta": 0.2941,
+        "iv": 0.1698,
+        "gamma": 0.0824,
+        "theta": -0.0268,
+        "vega": 0.0862,
+        "openInterest": 617
+      }
+    ],
+    "width": 2,
+    "netDebit": 75,
+    "maxLoss": 75,
+    "plannedRisk": 75,
+    "maxGain": 125,
+    "dte": 29,
+    "validation": {
+      "ok": true,
+      "failures": [],
+      "warnings": [
+        "earnings date unknown — VERIFY manually before executing (no long premium through earnings)"
+      ]
+    },
+    "earningsDate": null,
+    "macro": {
+      "nextFomc": "2026-09-16",
+      "nextCpi": "2026-09-11",
+      "fomcBeforeExpiry": true
+    }
+  }
+]
