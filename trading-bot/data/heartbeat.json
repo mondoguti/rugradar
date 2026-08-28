@@ -1,13 +1,13 @@
 {
-  "lastRunAt": "2026-08-27T19:46:21.575Z",
-  "equity": 1870.24,
+  "lastRunAt": "2026-08-28T14:52:08.591Z",
+  "equity": 1887.24,
   "openPositions": 3,
-  "cmd": "manage",
-  "lastScanAt": "2026-08-27T14:52:13.230Z",
-  "lastManageAt": "2026-08-27T19:46:21.575Z",
+  "cmd": "autopilot",
+  "lastScanAt": "2026-08-28T14:52:08.591Z",
+  "lastManageAt": "2026-08-28T14:52:08.591Z",
   "bookGreeks": {
-    "netDeltaDollars": 4632.1,
+    "netDeltaDollars": 5092.34,
     "netThetaPerDay": -1.41,
-    "netVega": 4.13
+    "netVega": 3.44
   }
 }

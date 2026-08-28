@@ -1,13 +1,13 @@
 # Trading Bot — Owner Digest
 
-_Auto-generated 2026-08-27T19:46:21.974Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
+_Auto-generated 2026-08-28T14:52:08.593Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
 
 ## Your account
 
-Your paper account is worth **$1870.24** (started at $2000.00, down 6.49%).
-- **BAC**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $152.25, now marked at $78.00 (down $74.25).
-- **GM**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $98.88, now marked at $130.50 (up $31.62).
-- **KO**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $77.50, now marked at $72.50 (down $5.00).
+Your paper account is worth **$1887.24** (started at $2000.00, down 5.64%).
+- **BAC**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $152.25, now marked at $96.00 (down $56.25).
+- **GM**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $98.88, now marked at $127.00 (up $28.12).
+- **KO**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $77.50, now marked at $75.00 (down $2.50).
 
 ## Recent trades (last 10)
 
@@ -27,8 +27,8 @@ Friction is the silent killer of small accounts; the bot models it pessimistical
 
 ## System health
 
-Last scheduled run: 2026-08-27T19:46:21.575Z (manage).
-Research dataset: 416 daily volatility snapshots collected so far (grows every scan; becomes tradeable evidence at ~120 days).
+Last scheduled run: 2026-08-28T14:52:08.591Z (autopilot).
+Research dataset: 436 daily volatility snapshots collected so far (grows every scan; becomes tradeable evidence at ~120 days).
 
 ## Needs your attention
 
