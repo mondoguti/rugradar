@@ -28,3 +28,4 @@
 {"ts":"2026-08-27T19:46:21.976Z","cmd":"manage","ok":true,"durationMs":1260,"equity":1870.24,"openPositions":3}
 {"ts":"2026-08-28T14:52:08.594Z","cmd":"autopilot","ok":true,"durationMs":61989,"equity":1887.24,"openPositions":3}
 {"ts":"2026-08-28T19:46:06.435Z","cmd":"manage","ok":true,"durationMs":1061,"equity":1894.74,"openPositions":3}
+{"ts":"2026-08-31T14:51:55.847Z","cmd":"autopilot","ok":true,"durationMs":55964,"equity":1897.24,"openPositions":3}
