@@ -3,7 +3,7 @@
 
 import config from '../config.js';
 import { equity, realizedToday, etDay } from './portfolio.js';
-import { tradingDaysBetween } from './calendar.js';
+import { tradingDaysBetween, nextEvent } from './calendar.js';
 
 // Current sizing tier for an equity level — see config.risk.tiers.
 export function tierFor(eq) {
@@ -39,6 +39,42 @@ export function deltaDollars(legs, spot) {
     d += (leg.action === 'buy' ? 1 : -1) * delta * leg.contracts * 100 * spot;
   }
   return d;
+}
+
+// Book-level exposure — the one risk view the frozen per-ticket gates cannot
+// see. Feeds status (display), autopilot (pre-fill snapshot), the heartbeat,
+// the ops ledger and the owner digest — one computation, every consumer.
+export function bookExposure(portfolio) {
+  const eq = equity(portfolio);
+  let netDelta = 0, netTheta = 0, netVega = 0, haveGreeks = false, bull = 0, bear = 0;
+  for (const p of portfolio.positions) {
+    const spot = p.spotAtMark ?? p.spot ?? 0;
+    for (const leg of p.legs) {
+      // Mark-time deltas when available — entry-day deltas go stale after any
+      // real move and misstate the book's true directional bet.
+      const d = leg.markDelta ?? leg.delta;
+      if (d == null) continue;
+      const sign = leg.action === 'buy' ? 1 : -1;
+      netDelta += sign * d * leg.contracts * 100 * spot;
+      if (leg.markTheta != null) { netTheta += sign * leg.markTheta * leg.contracts * 100; haveGreeks = true; }
+      if (leg.markVega != null) netVega += sign * leg.markVega * leg.contracts * 100;
+    }
+    if (p.direction === 'bullish') bull++; else if (p.direction === 'bearish') bear++;
+  }
+  const today = etDay();
+  const nf = nextEvent('fomc', today), nc = nextEvent('cpi', today);
+  const spans = (ev) => ev ? portfolio.positions.filter((p) => (p.legs?.[0]?.expiry ?? '') >= ev.date).length : 0;
+  return {
+    netDeltaDollars: +netDelta.toFixed(2),
+    netDeltaPctOfEquity: eq > 0 ? +(netDelta / eq).toFixed(3) : null,
+    netThetaPerDay: haveGreeks ? +netTheta.toFixed(2) : null,
+    netVega: haveGreeks ? +netVega.toFixed(2) : null,
+    positions: portfolio.positions.length, bullish: bull, bearish: bear,
+    nextFomc: nf?.date ?? null, nextCpi: nc?.date ?? null,
+    spanningNextFomc: spans(nf), spanningNextCpi: spans(nc),
+    quoteStalePositions: portfolio.positions.filter((p) => p.quoteStale).map((p) => p.symbol),
+    maxQuoteAgeMin: portfolio.positions.length ? Math.max(...portfolio.positions.map((p) => p.markQuoteAgeMin ?? 0)) : 0,
+  };
 }
 
 export function bookDeltaDollars(portfolio) {

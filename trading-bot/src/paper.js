@@ -32,7 +32,9 @@ export function executeTicketPaper(ticket, portfolio) {
   // flattering the exact structure the strategy leans on at scale.)
   const fills = ticket.legs.map((leg) => {
     const half = (leg.ask - leg.bid) / 2;
-    const px = leg.action === 'buy' ? slip(leg.mid, half) : Math.max(leg.mid - half * config.data.slippage, leg.bid);
+    // Clamped to the quote: a buy never pays above the ask, a sell never
+    // receives below the bid (inert on two-sided quotes; a guard otherwise).
+    const px = leg.action === 'buy' ? Math.min(slip(leg.mid, half), leg.ask) : Math.max(leg.mid - half * config.data.slippage, leg.bid);
     return { leg, px };
   });
   const fillNet = +fills.reduce((a, { leg, px }) => a + (leg.action === 'buy' ? px : -px) * leg.contracts * 100, 0).toFixed(2);
@@ -93,7 +95,7 @@ export function executeTicketPaper(ticket, portfolio) {
   // whether the modeled 25% flatters the record. Never touches recorded P&L.
   const shadowExtra = fills.reduce((a, { leg, px }) => {
     const half = (leg.ask - leg.bid) / 2;
-    const px50 = leg.action === 'buy' ? leg.mid + half * 0.5 : Math.max(leg.mid - half * 0.5, leg.bid);
+    const px50 = leg.action === 'buy' ? Math.min(leg.mid + half * 0.5, leg.ask) : Math.max(leg.mid - half * 0.5, leg.bid);
     return a + Math.abs(px50 - px) * leg.contracts * 100;
   }, 0);
   appendExecLog({
@@ -141,12 +143,12 @@ export async function markPosition(pos) {
   let stale = false;
   let band = 0;        // Σ half-spread × contracts × 100: today's ± quote-width band
   for (const leg of pos.legs) {
-    let q = legQuote(chain, leg);
-    // A SHORT leg with a zero bid but a live ask is still closeable — at the
-    // ask. Valuing it there is the conservative cost-to-close (never
-    // flatters) and keeps the spread markable instead of marooning it in
-    // the stale path until a blind total-loss settlement.
-    if (q && leg.action === 'sell' && !(q.bid > 0) && q.ask > 0) q = { ...q, mid: q.ask };
+    const q = legQuote(chain, leg);
+    // A contract quoted with a zero bid has no two-sided market: mid is null
+    // and the leg is unmarkable. CBOE's zero-bid asks are placeholders (3-25x
+    // theo on this record), so the one-sidedness is RECORDED, never priced —
+    // pricing a short leg at that ask manufactured stop fills.
+    leg.markOneSided = !!(q && !(q.bid > 0) && q.ask > 0);
     if (q?.mid == null) { stale = true; continue; }
     const half = (q.ask - q.bid) / 2;
     band += Math.abs(half) * leg.contracts * 100;
@@ -154,7 +156,7 @@ export async function markPosition(pos) {
     // sold legs get bought back (pay more than mid)
     const closePx = leg.action === 'buy'
       ? Math.max(q.mid - half * config.data.slippage, q.bid)
-      : q.mid + half * config.data.slippage;
+      : Math.min(q.mid + half * config.data.slippage, q.ask);
     value += (leg.action === 'buy' ? q.mid : -q.mid) * leg.contracts * 100;
     exitValue += (leg.action === 'buy' ? closePx : -closePx) * leg.contracts * 100;
     // Mark-time annotations (NEVER overwrite the entry-time leg fields):
@@ -202,6 +204,7 @@ export async function markPosition(pos) {
     }
   }
   pos.markStale = stale;
+  pos.zeroBidLegs = pos.legs.filter((l) => l.markOneSided).map((l) => `${l.action} ${l.type} ${l.strike} ${l.expiry}`);
   pos.spotAtMark = chain.spot ?? pos.spotAtMark;
 
   // Thesis check for long options: has the underlying broken the setup?
@@ -297,6 +300,7 @@ export function closePositionPaper(pos, portfolio, reason) {
   // fill anyway, the record says so.
   if (pos.quoteStale && (pos.staleDeferrals || 0) < config.data.maxStaleDeferrals && pos.dte > 1) {
     pos.staleDeferrals = (pos.staleDeferrals || 0) + 1;
+    savePortfolio(portfolio); // the counter must survive the run, or the cap never binds
     return { blocked: true, reason: `quote snapshot is ${pos.markQuoteAgeMin} min old — deferring the fill to the next run (${pos.staleDeferrals}/${config.data.maxStaleDeferrals})` };
   }
 
@@ -343,7 +347,7 @@ export function closePositionPaper(pos, portfolio, reason) {
   const shadowExtraClose = pos.legs.reduce((a, leg) => {
     if (leg.markMid == null || leg.markClosePx == null) return a;
     const half = (leg.markAsk - leg.markBid) / 2;
-    const px50 = leg.action === 'buy' ? Math.max(leg.markMid - half * 0.5, leg.markBid) : leg.markMid + half * 0.5;
+    const px50 = leg.action === 'buy' ? Math.max(leg.markMid - half * 0.5, leg.markBid) : Math.min(leg.markMid + half * 0.5, leg.markAsk);
     return a + Math.abs(px50 - leg.markClosePx) * leg.contracts * 100;
   }, 0);
   appendExecLog({

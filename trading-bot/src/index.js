@@ -20,12 +20,12 @@ import { getOptionsChain, useFixtures } from './marketdata.js';
 import { discoverUniverse } from './universe.js';
 import { earningsCheck } from './earnings.js';
 import { buildTicket } from './strategies.js';
-import { riskBudget, validateTicket, dayTradesInWindow, tierFor, governorState } from './risk.js';
+import { riskBudget, validateTicket, dayTradesInWindow, tierFor, governorState, bookExposure } from './risk.js';
 import { loadPortfolio, savePortfolio, loadTickets, saveTickets, equity, etDay, writeJsonAtomic, appendOpsLog, readOpsLog, updateHighWater } from './portfolio.js';
 import { executeTicketPaper, markPosition, exitDecision, closePositionPaper, settleExpiredBlind, recordLiveFill, recordLiveClose } from './paper.js';
 import { performance, gateStatus, fmtMoney } from './report.js';
 import { buildJournalRow, backfillOutcomes } from './journal.js';
-import { nextEvent, eventsBetween, coverageWarnings, isTradingDay } from './calendar.js';
+import { nextEvent, eventsBetween, coverageWarnings, isTradingDay, tradingDaysBetween } from './calendar.js';
 
 const args = process.argv.slice(2);
 const cmd = args.find((a) => !a.startsWith('--')) || 'status';
@@ -50,10 +50,16 @@ function checkHeartbeat() {
       console.log(`⚠ DEAD-MAN WARNING: heartbeat unreadable (${e.message}) — scheduler health unverifiable; check recent commits`);
       return;
     }
-    const day = new Date().getUTCDay(); // Sun=0, Mon=1
-    const allowed = (day === 0 || day === 1) ? 80 : 30; // weekend gap is normal
+    // Allowance per stamp: 30h of normal gap plus 24h for every non-trading
+    // day (weekend or holiday) between the stamp's session and today. A UTC
+    // weekday lookup false-alarmed after any holiday and stayed lenient on
+    // Mondays regardless of which day the stamp came from.
     const ageCheck = (stamp, what) => {
       if (!stamp) return;
+      const from = etDay(new Date(stamp)), to = etDay();
+      const calendarDays = Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 86400000));
+      const nonTrading = Math.max(0, calendarDays - tradingDaysBetween(from, to));
+      const allowed = 30 + 24 * nonTrading;
       const ageHours = (Date.now() - new Date(stamp)) / 3600000;
       if (ageHours > allowed) {
         console.log(`⚠ DEAD-MAN WARNING: ${what} was ${ageHours.toFixed(0)}h ago (allowed ${allowed}h) — scheduled runs may have been silently failing. Check the routine and recent commits.`);
@@ -64,7 +70,7 @@ function checkHeartbeat() {
 
     // Count actual runs against the schedule — a single fresh timestamp can
     // hide a week of every-other-run failures.
-    const runs = readOpsLog().filter((r) => r.ts && ['autopilot', 'manage'].includes(r.cmd));
+    const runs = readOpsLog().filter((r) => r.ts && ['autopilot', 'manage'].includes(r.cmd) && !r.skipped); // a holiday skip is not a run
     if (runs.length) {
       const now = Date.now();
       const windowStart = Math.max(now - 7 * 86400000, new Date(runs[0].ts).getTime());
@@ -104,7 +110,7 @@ function writeHeartbeat(portfolio, kind = 'autopilot') {
       // must stamp its own leg without clobbering the scan stamp.
       lastScanAt: kind === 'autopilot' ? now : prev.lastScanAt ?? null,
       lastManageAt: now,
-      bookGreeks: prev.bookGreeks ?? null, // refreshed by cmdStatus when marks allow
+      bookGreeks: bookExposure(portfolio), // live, from the marks this run just took
     });
   } catch { /* best effort */ }
 }
@@ -386,6 +392,7 @@ async function cmdManage() {
     if (r.blocked) console.log(`  BLOCKED closing ${a.symbol}: ${r.reason}`);
     else console.log(`  CLOSED ${a.symbol} for ${fmtMoney(r.realizedPnl)} realized`);
   }
+  savePortfolio(portfolio); // deferral counters and close bookkeeping must land on disk
   writeHeartbeat(portfolio, 'manage');
   await refreshDigest(portfolio);
   if (asJson) out({ actions }, '');
@@ -413,7 +420,7 @@ async function cmdStatus() {
   }
   const x = bookExposure(portfolio);
   for (const p of portfolio.positions) {
-    const staleTag = p.markStale ? '  [STALE MARK]' : p.quoteStale ? `  [QUOTES ${p.markQuoteAgeMin}min OLD${p.staleDeferrals ? `, exit deferred ${p.staleDeferrals}x` : ''}]` : '';
+    const staleTag = p.markStale ? `  [STALE MARK${p.zeroBidLegs?.length ? `: zero-bid ${p.zeroBidLegs.join(', ')}` : ''}]` : p.quoteStale ? `  [QUOTES ${p.markQuoteAgeMin}min OLD${p.staleDeferrals ? `, exit deferred ${p.staleDeferrals}x` : ''}]` : '';
     console.log(`  [${p.id}] ${p.symbol} ${p.structure}  in ${fmtMoney(p.entryValue)}  now ${fmtMoney(p.currentValue)}  uP&L ${fmtMoney(p.unrealizedPnl)}  opened ${p.openedAt.slice(0, 10)}${staleTag}`);
   }
   if (portfolio.positions.length) {
@@ -435,42 +442,6 @@ async function cmdStatus() {
       appendOpsLog({ ts: new Date().toISOString(), cmd: 'exposure', phase: 'status', ...x });
     } catch { /* telemetry only */ }
   }
-}
-
-// Book-level exposure — the one risk view the frozen per-ticket gates cannot
-// see. Feeds status (display), autopilot (pre-fill snapshot), the heartbeat,
-// the ops ledger and the owner digest.
-function bookExposure(portfolio) {
-  const eq = equity(portfolio);
-  let netDelta = 0, netTheta = 0, netVega = 0, haveGreeks = false, bull = 0, bear = 0;
-  for (const p of portfolio.positions) {
-    const spot = p.spotAtMark ?? p.spot ?? 0;
-    for (const leg of p.legs) {
-      // Mark-time deltas when available — entry-day deltas go stale after any
-      // real move and misstate the book's true directional bet.
-      const d = leg.markDelta ?? leg.delta;
-      if (d == null) continue;
-      const sign = leg.action === 'buy' ? 1 : -1;
-      netDelta += sign * d * leg.contracts * 100 * spot;
-      if (leg.markTheta != null) { netTheta += sign * leg.markTheta * leg.contracts * 100; haveGreeks = true; }
-      if (leg.markVega != null) netVega += sign * leg.markVega * leg.contracts * 100;
-    }
-    if (p.direction === 'bullish') bull++; else if (p.direction === 'bearish') bear++;
-  }
-  const today = etDay();
-  const nf = nextEvent('fomc', today), nc = nextEvent('cpi', today);
-  const spans = (ev) => ev ? portfolio.positions.filter((p) => (p.legs?.[0]?.expiry ?? '') >= ev.date).length : 0;
-  return {
-    netDeltaDollars: +netDelta.toFixed(2),
-    netDeltaPctOfEquity: eq > 0 ? +(netDelta / eq).toFixed(3) : null,
-    netThetaPerDay: haveGreeks ? +netTheta.toFixed(2) : null,
-    netVega: haveGreeks ? +netVega.toFixed(2) : null,
-    positions: portfolio.positions.length, bullish: bull, bearish: bear,
-    nextFomc: nf?.date ?? null, nextCpi: nc?.date ?? null,
-    spanningNextFomc: spans(nf), spanningNextCpi: spans(nc),
-    quoteStalePositions: portfolio.positions.filter((p) => p.quoteStale).map((p) => p.symbol),
-    maxQuoteAgeMin: portfolio.positions.length ? Math.max(...portfolio.positions.map((p) => p.markQuoteAgeMin ?? 0)) : 0,
-  };
 }
 
 async function cmdReport() {
@@ -590,11 +561,11 @@ async function cmdBacktest() {
 // PAPER ONLY by design — live orders always go through human confirmation.
 async function cmdAutopilot() {
   console.log(`\n=== autopilot run ${new Date().toISOString()} ===`);
+  checkHeartbeat(); // before the holiday guard: a dead scheduler must be caught on any day
   if (!isTradingDay(etDay())) {
     console.log(`market holiday (${etDay()}) — no autopilot run: no session, no quotes, no trades`);
     return { skipped: 'market-holiday' };
   }
-  checkHeartbeat();
   console.log('--- manage open positions ---');
   await cmdManage();
   // The exposure today's fills will be validated against (pre-fill snapshot).
@@ -793,11 +764,11 @@ const withOpsLog = (kind, fn) => async () => {
       const p = loadPortfolio();
       extra = { equity: +equity(p).toFixed(2), openPositions: p.positions.length };
     } catch { /* a corrupt portfolio must not mask the run outcome */ }
-    appendOpsLog({ ts: new Date().toISOString(), cmd: kind, ok, durationMs: Date.now() - t0, ...extra, ...(note ? { note } : {}) });
+    appendOpsLog({ ts: new Date().toISOString(), cmd: kind, ok, durationMs: Date.now() - t0, ...extra, ...(typeof note === 'string' ? { note } : note ?? {}) });
   };
   try {
     const r = await fn();
-    finish(true, r?.skipped ? `skipped: ${r.skipped}` : undefined);
+    finish(true, r?.skipped ? { skipped: r.skipped, note: `skipped: ${r.skipped}` } : undefined);
   } catch (e) {
     finish(false, e.message);
     throw e; // preserve the non-zero exit code

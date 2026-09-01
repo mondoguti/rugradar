@@ -155,6 +155,17 @@ re-tuning on backtests manufactures fake edges. New ideas follow one road:
   `data.maxQuoteAgeMin`, and paper closes on stale snapshots are deferred
   (`filledOnStaleQuoteMin` marks the ones that filled anyway). Earlier fills
   are left exactly as recorded — annotated forward, never rewritten.
+  Same-day corrections from the review of that change: the deferral counter
+  was not being written to disk (so the two-run cap could never bind; fixed
+  before any deferral had occurred, so no record was affected), and a rule
+  that priced zero-bid SHORT legs at the ask was reverted before it touched a
+  fill: CBOE's zero-bid asks are placeholders (3-25x theoretical on this
+  record), so such legs are now recorded as one-sided (`markOneSided`,
+  `zeroBidLegs`) and left unmarkable, exactly as before. Paper fills are also
+  clamped to the quote (a buy never above the ask, a sell never below the
+  bid), inert on two-sided quotes and a guard otherwise. The dead-man check
+  now allows 24h per non-trading day between runs instead of a UTC-weekday
+  lookup, and runs on holidays too.
 - Directional-exposure cap, PRE-REGISTERED 2026-09-01 (`risk.directionalExposure`,
   rulebook id `directional-exposure-cap`): net delta ≤ 2.0× equity and
   same-direction positions ≤ slots − 1. Rejection-only; it never touches an

@@ -1,6 +1,6 @@
 # Trading Bot — Owner Digest
 
-_Auto-generated 2026-09-01T20:18:16.468Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
+_Auto-generated 2026-09-01T21:04:31.463Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
 
 ## Your account
 
@@ -33,5 +33,5 @@ Research dataset: 472 daily volatility snapshots collected so far (grows every s
 ## Needs your attention
 
 - Your 2 positions all profit only if stocks rise; net exposure is 1.92x your equity — a 3% market move against you would cost about $106.48 in one day.
-- 2 position(s) hold through CPI 2026-09-11 and FOMC 2026-09-16 — expect sharp moves around those releases.
+- Positions holding through scheduled market-moving events: 2 through the CPI release on 2026-09-11, 2 through the FOMC decision on 2026-09-16 — expect sharp moves around those releases.
 - **GM**'s latest price snapshot was 377.5 minutes old when marked — treat its mark as approximate.

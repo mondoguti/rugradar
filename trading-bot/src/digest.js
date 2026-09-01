@@ -12,7 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import config from '../config.js';
 import { performance, gateStatus, fmtMoney } from './report.js';
-import { governorState } from './risk.js';
+import { governorState, bookExposure } from './risk.js';
 import { readOpsLog } from './portfolio.js';
 import { loadJournal } from './journal.js';
 
@@ -91,8 +91,10 @@ export function writeDigest({ portfolio, tickets = [], heartbeat = null }) {
   }
   if (gov.riskFactor === 0) attention.push('- The drawdown circuit breaker HALTED new trades — a human needs to review the account before it resumes.');
   // Book-level direction and event risk — the things no single trade shows.
-  const bg = heartbeat?.bookGreeks;
-  if (bg && portfolio.positions.length) {
+  // Computed from the portfolio in hand, never read back from a heartbeat
+  // that may predate this run's marks.
+  const bg = bookExposure(portfolio);
+  if (portfolio.positions.length) {
     const oneWay = (bg.bullish > 0 && bg.bearish === 0) || (bg.bearish > 0 && bg.bullish === 0);
     const lean = Math.abs(bg.netDeltaPctOfEquity ?? 0);
     if (lean > 1.5 || (oneWay && portfolio.positions.length > 1)) {
@@ -100,8 +102,8 @@ export function writeDigest({ portfolio, tickets = [], heartbeat = null }) {
       attention.push(`- Your ${portfolio.positions.length} positions ${oneWay ? `all profit only if stocks ${dir}` : 'lean heavily one way'}; net exposure is ${lean.toFixed(2)}x your equity — a 3% market move against you would cost about ${fmtMoney(0.03 * Math.abs(bg.netDeltaDollars || 0))} in one day.`);
     }
     if (bg.spanningNextFomc || bg.spanningNextCpi) {
-      const evs = [bg.spanningNextCpi ? `CPI ${bg.nextCpi}` : null, bg.spanningNextFomc ? `FOMC ${bg.nextFomc}` : null].filter(Boolean).join(' and ');
-      attention.push(`- ${Math.max(bg.spanningNextFomc, bg.spanningNextCpi)} position(s) hold through ${evs} — expect sharp moves around those releases.`);
+      const evs = [bg.spanningNextCpi ? `${bg.spanningNextCpi} through the CPI release on ${bg.nextCpi}` : null, bg.spanningNextFomc ? `${bg.spanningNextFomc} through the FOMC decision on ${bg.nextFomc}` : null].filter(Boolean).join(', ');
+      attention.push(`- Positions holding through scheduled market-moving events: ${evs} — expect sharp moves around those releases.`);
     }
   }
   for (const pos of portfolio.positions) {
