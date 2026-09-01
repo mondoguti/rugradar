@@ -18,7 +18,7 @@
   {
     "id": "pc-ratio",
     "signal": "pcVolRatio",
-    "hypothesis": "Elevated put/call volume ratio at the open snapshot predicts 10-day underperformance. Honest caveat: this is the UNSIGNED, partial-day proxy of the literature signal (Pan/Poteshman need signed opening volume, which delayed feeds cannot provide) — the bar for activation is the same, the prior is weaker.",
+    "hypothesis": "Elevated put/call volume ratio at the open snapshot predicts 10-day underperformance. Honest caveat: this is the UNSIGNED, partial-day proxy of the literature signal (Pan/Poteshman need signed opening volume, which delayed feeds cannot provide) \u2014 the bar for activation is the same, the prior is weaker.",
     "registeredAt": "2026-08-06",
     "test": "tercile_mean_diff",
     "field": "pcVolRatio",
@@ -26,16 +26,18 @@
     "direction": "top_below_bottom",
     "thresholdPct": 0.5,
     "stability": "same_sign_both_halves",
-    "conditionedOn": { "partialDay": true },
+    "conditionedOn": {
+      "partialDay": true
+    },
     "minRows": 1500,
     "minCalendarDays": 120,
-    "activates": "Entry-quality input only via a further pre-registered proposal — never a direct gate from this rule alone.",
+    "activates": "Entry-quality input only via a further pre-registered proposal \u2014 never a direct gate from this rule alone.",
     "status": "journaling"
   },
   {
     "id": "os-ratio",
     "signal": "optDollarVol/adv20",
-    "hypothesis": "Unusually high options dollar volume relative to stock dollar volume (O/S ratio, Johnson/So 2012) predicts larger absolute 10-day moves in the direction informed traders lean. Unsigned partial-day proxy — same caveat as pc-ratio.",
+    "hypothesis": "Unusually high options dollar volume relative to stock dollar volume (O/S ratio, Johnson/So 2012) predicts larger absolute 10-day moves in the direction informed traders lean. Unsigned partial-day proxy \u2014 same caveat as pc-ratio.",
     "registeredAt": "2026-08-06",
     "test": "tercile_mean_diff",
     "field": "osRatio",
@@ -43,10 +45,12 @@
     "direction": "top_below_bottom",
     "thresholdPct": 0.5,
     "stability": "same_sign_both_halves",
-    "conditionedOn": { "partialDay": true },
+    "conditionedOn": {
+      "partialDay": true
+    },
     "minRows": 1500,
     "minCalendarDays": 120,
-    "activates": "Entry-quality input only via a further pre-registered proposal — never a direct gate from this rule alone.",
+    "activates": "Entry-quality input only via a further pre-registered proposal \u2014 never a direct gate from this rule alone.",
     "status": "journaling"
   },
   {
@@ -58,7 +62,7 @@
     "minClosedCreditTrades": 10,
     "minJoinedRowsPerSymbol": 60,
     "pfGap": 0.5,
-    "activates": "config.entries.requirePositiveVrpForCredit — a PURE TIGHTENING (blocks credit spreads in negative-VRP symbols, never adds trades). Activation requires a human commit citing this rule id.",
+    "activates": "config.entries.requirePositiveVrpForCredit \u2014 a PURE TIGHTENING (blocks credit spreads in negative-VRP symbols, never adds trades). Activation requires a human commit citing this rule id.",
     "status": "journaling"
   },
   {
@@ -91,25 +95,39 @@
   {
     "id": "credit-route-revival",
     "signal": "bestCreditFracPut / bestCreditFracCall (daily journal v3 fields) vs the frozen minCreditFractionOfWidth=0.25 floor",
-    "hypothesis": "The 25%-of-width credit floor is structurally unachievable on this universe at the 0.25-delta short (2026-08-07 snapshot measured 12-23% achievable on real liquid strikes; both rich-regime symbols failed at every budget), so the credit/VRP route — the wing with researched edge — is dead by construction rather than by market conditions. The daily bestCreditFrac series will confirm or refute this on forward data.",
+    "hypothesis": "The 25%-of-width credit floor is structurally unachievable on this universe at the 0.25-delta short (2026-08-07 snapshot measured 12-23% achievable on real liquid strikes; both rich-regime symbols failed at every budget), so the credit/VRP route \u2014 the wing with researched edge \u2014 is dead by construction rather than by market conditions. The daily bestCreditFrac series will confirm or refute this on forward data.",
     "registeredAt": "2026-08-07",
     "test": "manual_review",
-    "evidenceRequired": "At least 120 calendar days of bestCreditFracPut/Call observations across the journal universe. Review: per-symbol median achievable fraction, and the fraction of rich-regime days on which ANY symbol cleared 0.25. If the floor is confirmed structurally out of reach while VRP evidence (vrp-credit-gate observations) stays supportive, the owner MAY commit a revised floor and/or maxSpreadWidth — with the new values justified in the commit from this forward series, never from a backtest — and ONLY at equity >= $8,000 where ~$400 budgets make wider wings honestly sizeable.",
+    "evidenceRequired": "At least 120 calendar days of bestCreditFracPut/Call observations across the journal universe. Review: per-symbol median achievable fraction, and the fraction of rich-regime days on which ANY symbol cleared 0.25. If the floor is confirmed structurally out of reach while VRP evidence (vrp-credit-gate observations) stays supportive, the owner MAY commit a revised floor and/or maxSpreadWidth \u2014 with the new values justified in the commit from this forward series, never from a backtest \u2014 and ONLY at equity >= $8,000 where ~$400 budgets make wider wings honestly sizeable.",
     "activates": "Nothing automatically. This rule exists to start the evidence clock and to bind any future change of minCreditFractionOfWidth / maxSpreadWidth to forward data plus an explicit owner commit citing this id.",
-    "seriesNote": "gateMetrics semantics v2 from 2026-08-11 (rows carry metricsVersion:2): expiry selection and liquidity now reuse the frozen builders' own pickExpiry/liquid, fixing a v1 drift that flipped ~21% of floor verdicts. No v1 gateMetrics rows were ever journaled (the field shipped 2026-08-07 after that day's scan), so the series is homogeneous — the evidence clock runs on v2 rows only.",
+    "seriesNote": "gateMetrics semantics v2 from 2026-08-11 (rows carry metricsVersion:2): expiry selection and liquidity now reuse the frozen builders' own pickExpiry/liquid, fixing a v1 drift that flipped ~21% of floor verdicts. No v1 gateMetrics rows were ever journaled (the field shipped 2026-08-07 after that day's scan), so the series is homogeneous \u2014 the evidence clock runs on v2 rows only.",
     "status": "journaling"
   },
   {
     "id": "parkinson-router",
     "signal": "hvP20 vs hv20 as the IV-regime denominator",
-    "hypothesis": "The hv20- and Parkinson-based IV regime classifications disagree on at least 15% of rows, AND among disagreement rows the realized VRP sign (atmIV - rv21) agrees with the Parkinson classification at least 60% of the time — evidence the router's denominator should be A/B tested forward.",
+    "hypothesis": "The hv20- and Parkinson-based IV regime classifications disagree on at least 15% of rows, AND among disagreement rows the realized VRP sign (atmIV - rv21) agrees with the Parkinson classification at least 60% of the time \u2014 evidence the router's denominator should be A/B tested forward.",
     "registeredAt": "2026-08-06",
     "test": "parkinson_disagreement",
     "minDisagreementPct": 0.15,
-    "minAgreementPct": 0.60,
+    "minAgreementPct": 0.6,
     "minRows": 500,
     "minCalendarDays": 120,
-    "activates": "Permission to PROPOSE a new forward A/B of the regime denominator — NEVER a retroactive swap of the frozen router.",
+    "activates": "Permission to PROPOSE a new forward A/B of the regime denominator \u2014 NEVER a retroactive swap of the frozen router.",
     "status": "journaling"
+  },
+  {
+    "id": "directional-exposure-cap",
+    "kind": "risk-overlay",
+    "signal": "book net delta$/equity and same-direction position count at validateTicket",
+    "registeredAt": "2026-09-01",
+    "numbers": {
+      "maxNetDeltaPctOfEquity": 2.0,
+      "sameDirectionSlotPenalty": 1
+    },
+    "justification": "Schedule-derived, not backtested: a 7.5%-budget position runs 0.6-1.0x equity of delta in this record (11.6x-21.5x delta$/budget), so 2.0x admits two typical same-way positions and blocks the third; a -6% beta-1 day costs ~12% of equity delta-only, under the 15% governor rung. Book on registration day: 3 bullish / 0 bearish, 2.84x, all expiring through CPI 09-11 and FOMC 09-16. Rejection-only: never adds size, never touches an open position or an exit rule.",
+    "replayOnRecord": "BAC 2026-08-20 PASS (0.96x); GM 08-20 PASS (1.52x); LAC 08-21 PASS (hedge, shrinks |net delta|); KO 08-27 would have been REJECTED (2.56x and 3rd same-direction slot).",
+    "status": "active-overlay",
+    "changes": "any change to these numbers needs its own entry and its own commit citing this id"
   }
 ]

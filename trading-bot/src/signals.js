@@ -203,6 +203,7 @@ export function evaluateRules(portfolio) {
   const joined = joinedRows();
   const results = rules.map((rule) => {
     if (rule.status === 'withdrawn') return { id: rule.id, status: 'WITHDRAWN', detail: 'rule withdrawn — kept for the record' };
+    if (rule.kind === 'risk-overlay') return { id: rule.id, status: 'ACTIVE_OVERLAY', detail: `${rule.justification} (numbers: ${JSON.stringify(rule.numbers)})` };
     try {
       if (rule.test === 'tercile_mean_diff') return evalTercile(rule, joined);
       if (rule.test === 'vrp_credit_join') return evalVrpCreditJoin(rule, joined, portfolio);

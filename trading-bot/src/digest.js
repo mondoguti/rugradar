@@ -67,11 +67,11 @@ export function writeDigest({ portfolio, tickets = [], heartbeat = null }) {
   }
 
   const costLines = [
-    `Total modeled trading friction so far (slippage + fees): **${fmtMoney(p.grossFriction)}**${p.frictionPctOfGrossWins != null ? ` — that is ${p.frictionPctOfGrossWins}% of gross wins` : ''}.`,
-    'Friction is the silent killer of small accounts; the bot models it pessimistically on purpose.',
+    `Total modeled trading friction so far (slippage + fees, closed and open trades): **${fmtMoney(p.grossFriction)}**${p.frictionPctOfMidPnl != null ? ` — on closed trades, friction consumed ${p.frictionPctOfMidPnl}% of the price moves the bot caught` : ''}.`,
+    'Friction is the silent killer of small accounts. The model is fair on tight quotes and slightly generous on wide ones; real fills will calibrate it.',
   ];
 
-  const ops = readOpsLog();
+  const ops = readOpsLog().filter((r) => ['autopilot', 'manage'].includes(r.cmd));
   const lastRun = ops.length ? ops[ops.length - 1] : null;
   const failedRecent = ops.slice(-14).filter((r) => r.ok === false).length;
   const health = [];
@@ -90,6 +90,23 @@ export function writeDigest({ portfolio, tickets = [], heartbeat = null }) {
     if (pos.needsReconcile) attention.push(`- LIVE position **${pos.symbol}** expired with no local data — record the real settlement: \`record-close ${pos.id} --net=<dollars> --confirm\`.`);
   }
   if (gov.riskFactor === 0) attention.push('- The drawdown circuit breaker HALTED new trades — a human needs to review the account before it resumes.');
+  // Book-level direction and event risk — the things no single trade shows.
+  const bg = heartbeat?.bookGreeks;
+  if (bg && portfolio.positions.length) {
+    const oneWay = (bg.bullish > 0 && bg.bearish === 0) || (bg.bearish > 0 && bg.bullish === 0);
+    const lean = Math.abs(bg.netDeltaPctOfEquity ?? 0);
+    if (lean > 1.5 || (oneWay && portfolio.positions.length > 1)) {
+      const dir = (bg.bullish ?? 0) >= (bg.bearish ?? 0) ? 'rise' : 'fall';
+      attention.push(`- Your ${portfolio.positions.length} positions ${oneWay ? `all profit only if stocks ${dir}` : 'lean heavily one way'}; net exposure is ${lean.toFixed(2)}x your equity — a 3% market move against you would cost about ${fmtMoney(0.03 * Math.abs(bg.netDeltaDollars || 0))} in one day.`);
+    }
+    if (bg.spanningNextFomc || bg.spanningNextCpi) {
+      const evs = [bg.spanningNextCpi ? `CPI ${bg.nextCpi}` : null, bg.spanningNextFomc ? `FOMC ${bg.nextFomc}` : null].filter(Boolean).join(' and ');
+      attention.push(`- ${Math.max(bg.spanningNextFomc, bg.spanningNextCpi)} position(s) hold through ${evs} — expect sharp moves around those releases.`);
+    }
+  }
+  for (const pos of portfolio.positions) {
+    if (pos.quoteStale) attention.push(`- **${pos.symbol}**'s latest price snapshot was ${pos.markQuoteAgeMin} minutes old when marked${pos.staleDeferrals ? ` (an exit has been deferred ${pos.staleDeferrals}x waiting for fresh quotes)` : ''} — treat its mark as approximate.`);
+  }
 
   const md = [
     '# Trading Bot — Owner Digest',

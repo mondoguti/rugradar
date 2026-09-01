@@ -25,7 +25,7 @@ import { loadPortfolio, savePortfolio, loadTickets, saveTickets, equity, etDay, 
 import { executeTicketPaper, markPosition, exitDecision, closePositionPaper, settleExpiredBlind, recordLiveFill, recordLiveClose } from './paper.js';
 import { performance, gateStatus, fmtMoney } from './report.js';
 import { buildJournalRow, backfillOutcomes } from './journal.js';
-import { nextEvent, eventsBetween, coverageWarnings } from './calendar.js';
+import { nextEvent, eventsBetween, coverageWarnings, isTradingDay } from './calendar.js';
 
 const args = process.argv.slice(2);
 const cmd = args.find((a) => !a.startsWith('--')) || 'status';
@@ -76,7 +76,7 @@ function checkHeartbeat() {
         // before either of today's runs could have logged — counting today
         // as 2 expected / 0 logged would false-alarm every healthy weekday.
         if (d.toISOString().slice(0, 10) === todayUtc) continue;
-        if (d.getUTCDay() >= 1 && d.getUTCDay() <= 5) weekdays++;
+        if (isTradingDay(d.toISOString().slice(0, 10))) weekdays++; // holidays are not missed runs
       }
       const expected = weekdays * config.ops.runsPerWeekday;
       const got = runs.filter((r) => new Date(r.ts).getTime() >= windowStart).length;
@@ -187,7 +187,9 @@ async function cmdScan() {
   // so we build our own. Months of these snapshots unlock honest IV-rank,
   // skew, and term-structure signals no backtest can fabricate.
   // (Fixture runs write to data-fixtures/ via the DATA_ROOT redirect.)
-  try {
+  // Never journal on a non-trading day: a row dated on a holiday can never be
+  // labeled and would burn labeler fetch slots for 220 days.
+  if (isTradingDay(etDay())) try {
     const jf = path.join(DATA_ROOT, 'iv-history.jsonl');
     fs.mkdirSync(path.dirname(jf), { recursive: true });
     const today = etDay(); // market day, not UTC day — a late-UTC run must not roll the date
@@ -296,6 +298,10 @@ async function cmdPaperBuy() {
 }
 
 async function cmdManage() {
+  if (!isTradingDay(etDay())) {
+    console.log(`market holiday (${etDay()}) — no manage run: marks would reuse the prior session's quotes`);
+    return { skipped: 'market-holiday' };
+  }
   const portfolio = loadPortfolio();
   if (!portfolio.positions.length) {
     console.log('No open positions.');
@@ -317,6 +323,7 @@ async function cmdManage() {
       const blind = settleExpiredBlind(pos, portfolio);
       if (blind.settled) {
         console.log(`  SETTLED ${pos.symbol} blind: all legs expired with no market data — realized ${fmtMoney(blind.realizedPnl)} (conservative total loss)`);
+        if ((pos.currentValue ?? 0) > 0) console.log(`  ⚠ NOTE: the last good mark valued ${pos.symbol} at ${fmtMoney(pos.currentValue)} — a data-free settlement booked it at zero. If the real position had value, that is a feed failure, not a trade.`);
       } else if (blind.liveExpired) {
         console.log(`  ⚠ LIVE position ${pos.symbol} is past expiry with no market data — reconcile the real broker settlement via /bot-manage and record the actual fill`);
       } else if (pos.markFailures >= 3) {
@@ -333,6 +340,7 @@ async function cmdManage() {
       const blind = settleExpiredBlind(pos, portfolio);
       if (blind.settled) {
         console.log(`  SETTLED ${pos.symbol} blind: all legs expired but quotes are gone — realized ${fmtMoney(blind.realizedPnl)} (conservative total loss)`);
+        if ((pos.currentValue ?? 0) > 0) console.log(`  ⚠ NOTE: the last good mark valued ${pos.symbol} at ${fmtMoney(pos.currentValue)} — a data-free settlement booked it at zero. If the real position had value, that is a feed failure, not a trade.`);
         continue; // removed from portfolio.positions — nothing left to decide
       }
       if (blind.liveExpired) {
@@ -403,9 +411,39 @@ async function cmdStatus() {
     const ageDays = (Date.now() - new Date(t.createdAt)) / 86400000;
     if (ageDays > 1) console.log(`  ⚠ ACTION NEEDED: live order [${t.id}] ${t.symbol} was placed ${Math.round(ageDays)}d ago and never recorded — check the broker: record-fill if it filled, or remove the ticket if it was canceled`);
   }
+  const x = bookExposure(portfolio);
+  for (const p of portfolio.positions) {
+    const staleTag = p.markStale ? '  [STALE MARK]' : p.quoteStale ? `  [QUOTES ${p.markQuoteAgeMin}min OLD${p.staleDeferrals ? `, exit deferred ${p.staleDeferrals}x` : ''}]` : '';
+    console.log(`  [${p.id}] ${p.symbol} ${p.structure}  in ${fmtMoney(p.entryValue)}  now ${fmtMoney(p.currentValue)}  uP&L ${fmtMoney(p.unrealizedPnl)}  opened ${p.openedAt.slice(0, 10)}${staleTag}`);
+  }
+  if (portfolio.positions.length) {
+    console.log(`Book exposure: net delta ${fmtMoney(x.netDeltaDollars)} of underlying = ${x.netDeltaPctOfEquity != null ? `${x.netDeltaPctOfEquity.toFixed(2)}x equity` : '—'} (${x.bullish} bullish / ${x.bearish} bearish), as of last mark`);
+    if (x.netThetaPerDay != null) {
+      console.log(`Book greeks: theta ${fmtMoney(x.netThetaPerDay)}/day (${((x.netThetaPerDay / eq) * 100).toFixed(2)}% of equity daily), vega ${fmtMoney(x.netVega)} per vol point`);
+    }
+    if (x.spanningNextFomc || x.spanningNextCpi) {
+      console.log(`Event window: ${x.spanningNextCpi} position(s) hold through CPI ${x.nextCpi ?? '—'}, ${x.spanningNextFomc} through FOMC ${x.nextFomc ?? '—'}`);
+    }
+    // Journal exposure into the heartbeat AND the ops ledger so a durable
+    // per-run series exists (the heartbeat is overwritten every run).
+    try {
+      if (fs.existsSync(HEARTBEAT)) {
+        const hb = JSON.parse(fs.readFileSync(HEARTBEAT, 'utf8'));
+        hb.bookGreeks = x;
+        writeJsonAtomic(HEARTBEAT, hb);
+      }
+      appendOpsLog({ ts: new Date().toISOString(), cmd: 'exposure', phase: 'status', ...x });
+    } catch { /* telemetry only */ }
+  }
+}
+
+// Book-level exposure — the one risk view the frozen per-ticket gates cannot
+// see. Feeds status (display), autopilot (pre-fill snapshot), the heartbeat,
+// the ops ledger and the owner digest.
+function bookExposure(portfolio) {
+  const eq = equity(portfolio);
   let netDelta = 0, netTheta = 0, netVega = 0, haveGreeks = false, bull = 0, bear = 0;
   for (const p of portfolio.positions) {
-    console.log(`  [${p.id}] ${p.symbol} ${p.structure}  in ${fmtMoney(p.entryValue)}  now ${fmtMoney(p.currentValue)}  uP&L ${fmtMoney(p.unrealizedPnl)}  opened ${p.openedAt.slice(0, 10)}${p.markStale ? '  [STALE MARK]' : ''}`);
     const spot = p.spotAtMark ?? p.spot ?? 0;
     for (const leg of p.legs) {
       // Mark-time deltas when available — entry-day deltas go stale after any
@@ -419,24 +457,20 @@ async function cmdStatus() {
     }
     if (p.direction === 'bullish') bull++; else if (p.direction === 'bearish') bear++;
   }
-  if (portfolio.positions.length) {
-    console.log(`Book exposure: net delta ${fmtMoney(netDelta)} of underlying (${bull} bullish / ${bear} bearish), as of last mark`);
-    if (haveGreeks) {
-      console.log(`Book greeks: theta ${fmtMoney(netTheta)}/day (${((netTheta / eq) * 100).toFixed(2)}% of equity daily), vega ${fmtMoney(netVega)} per vol point`);
-    }
-    // Journal exposure into the heartbeat so every scheduled run records it.
-    try {
-      if (fs.existsSync(HEARTBEAT)) {
-        const hb = JSON.parse(fs.readFileSync(HEARTBEAT, 'utf8'));
-        hb.bookGreeks = {
-          netDeltaDollars: +netDelta.toFixed(2),
-          netThetaPerDay: haveGreeks ? +netTheta.toFixed(2) : null,
-          netVega: haveGreeks ? +netVega.toFixed(2) : null,
-        };
-        writeJsonAtomic(HEARTBEAT, hb);
-      }
-    } catch { /* telemetry only */ }
-  }
+  const today = etDay();
+  const nf = nextEvent('fomc', today), nc = nextEvent('cpi', today);
+  const spans = (ev) => ev ? portfolio.positions.filter((p) => (p.legs?.[0]?.expiry ?? '') >= ev.date).length : 0;
+  return {
+    netDeltaDollars: +netDelta.toFixed(2),
+    netDeltaPctOfEquity: eq > 0 ? +(netDelta / eq).toFixed(3) : null,
+    netThetaPerDay: haveGreeks ? +netTheta.toFixed(2) : null,
+    netVega: haveGreeks ? +netVega.toFixed(2) : null,
+    positions: portfolio.positions.length, bullish: bull, bearish: bear,
+    nextFomc: nf?.date ?? null, nextCpi: nc?.date ?? null,
+    spanningNextFomc: spans(nf), spanningNextCpi: spans(nc),
+    quoteStalePositions: portfolio.positions.filter((p) => p.quoteStale).map((p) => p.symbol),
+    maxQuoteAgeMin: portfolio.positions.length ? Math.max(...portfolio.positions.map((p) => p.markQuoteAgeMin ?? 0)) : 0,
+  };
 }
 
 async function cmdReport() {
@@ -481,7 +515,7 @@ async function cmdReport() {
         console.log(`  ${k.padEnd(24)} ${stats(trades)}`);
       }
     }
-    console.log(`\nTotal modeled friction (slippage + fees): ${fmtMoney(p.grossFriction)}${p.frictionPctOfGrossWins != null ? ` = ${p.frictionPctOfGrossWins}% of gross wins` : ''} — compare against real fills at go-live`);
+    console.log(`\nTotal modeled friction (slippage + fees, closed $${p.closedFriction} + open entries $${p.openFriction}): ${fmtMoney(p.grossFriction)}${p.frictionPctOfMidPnl != null ? ` — on closed trades friction consumed ${p.frictionPctOfMidPnl}% of the mid-to-mid price moves caught` : ''} — compare against real fills at go-live`);
   }
 }
 
@@ -556,9 +590,15 @@ async function cmdBacktest() {
 // PAPER ONLY by design — live orders always go through human confirmation.
 async function cmdAutopilot() {
   console.log(`\n=== autopilot run ${new Date().toISOString()} ===`);
+  if (!isTradingDay(etDay())) {
+    console.log(`market holiday (${etDay()}) — no autopilot run: no session, no quotes, no trades`);
+    return { skipped: 'market-holiday' };
+  }
   checkHeartbeat();
   console.log('--- manage open positions ---');
   await cmdManage();
+  // The exposure today's fills will be validated against (pre-fill snapshot).
+  try { appendOpsLog({ ts: new Date().toISOString(), cmd: 'exposure', phase: 'pre-fill', ...bookExposure(loadPortfolio()) }); } catch { /* telemetry */ }
   console.log('--- scan for setups ---');
   await cmdScan();
   // Unattended runs must not violate the earnings discipline: tickets whose
@@ -756,8 +796,8 @@ const withOpsLog = (kind, fn) => async () => {
     appendOpsLog({ ts: new Date().toISOString(), cmd: kind, ok, durationMs: Date.now() - t0, ...extra, ...(note ? { note } : {}) });
   };
   try {
-    await fn();
-    finish(true);
+    const r = await fn();
+    finish(true, r?.skipped ? `skipped: ${r.skipped}` : undefined);
   } catch (e) {
     finish(false, e.message);
     throw e; // preserve the non-zero exit code

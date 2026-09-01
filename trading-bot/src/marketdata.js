@@ -121,19 +121,29 @@ export async function getDailyHistory(symbol, days = config.data.historyDays) {
   }
   const cached = cacheGet(`hist-${symbol}-${days}`);
   if (cached) return cached;
-  let bars;
+  let bars, source;
   try {
-    bars = await historyFromCboe(symbol);
+    bars = await historyFromCboe(symbol); source = 'cboe';
   } catch {
     try {
-      bars = await historyFromStooq(symbol);
+      bars = await historyFromStooq(symbol); source = 'stooq';
     } catch {
-      bars = await historyFromYahoo(symbol, days);
+      bars = await historyFromYahoo(symbol, days); source = 'yahoo';
     }
   }
   bars = bars.slice(-days);
   cacheSet(`hist-${symbol}-${days}`, bars);
+  // Provenance sidecar. The outcome labeler indexes bars by array position
+  // and refuses to write permanent labels from the Yahoo fallback, which
+  // drops null-close bars (verified live: 2026-08-28 missing for BAC) — a
+  // hole labeled by position is a wrong label forever.
+  cacheSet(`hist-${symbol}-${days}-meta`, { source, fetchedAt: new Date().toISOString() });
   return bars;
+}
+
+export function getDailyHistoryMeta(symbol, days = config.data.historyDays) {
+  if (useFixtures()) return { source: 'fixtures', fetchedAt: null };
+  return cacheGet(`hist-${symbol}-${days}-meta`);
 }
 
 // ---------- options chains ----------
@@ -181,7 +191,33 @@ async function chainFromCboe(symbol) {
       theo: o.theo ?? null,
     });
   }
-  return { symbol, spot, updatedAt: new Date().toISOString(), contracts };
+  return {
+    symbol, spot, updatedAt: new Date().toISOString(),
+    // Provenance — CBOE regenerates these snapshots LAZILY: a chain can be
+    // hours old while the fetch is fresh (verified 2026-09-01: GM stamped
+    // 14:00:48Z, last trade 09:45 ET, still served unchanged at 20:00Z).
+    // Every consumer must check the age; updatedAt alone is a lie.
+    asOf: cboeTsToIso(j.timestamp),
+    lastTradeAt: d.last_trade_time ?? null,   // ET wall clock, no zone suffix
+    prevClose: d.prev_day_close ?? null,
+    source: 'cboe',
+    contracts,
+  };
+}
+
+// CBOE stamps 'YYYY-MM-DD HH:MM:SS' in UTC (timestamp 14:00:48 paired with
+// last_trade_time 09:45:48 ET = 13:45:48Z).
+function cboeTsToIso(ts) {
+  if (typeof ts !== 'string') return null;
+  const iso = ts.trim().replace(' ', 'T') + 'Z';
+  return Number.isNaN(Date.parse(iso)) ? null : iso;
+}
+
+// Minutes since the chain snapshot was generated (null when unknown).
+export function chainAgeMin(chain, now = Date.now()) {
+  if (!chain?.asOf) return null;
+  const t = Date.parse(chain.asOf);
+  return Number.isNaN(t) ? null : (now - t) / 60000;
 }
 
 async function chainFromYahoo(symbol) {
@@ -215,7 +251,12 @@ async function chainFromYahoo(symbol) {
       }
     }
   }
-  return { symbol, spot, updatedAt: new Date().toISOString(), contracts };
+  return {
+    symbol, spot, updatedAt: new Date().toISOString(),
+    asOf: new Date().toISOString(), lastTradeAt: null,
+    prevClose: res0.quote?.regularMarketPreviousClose ?? null,
+    source: 'yahoo', contracts,
+  };
 }
 
 // Fill missing greeks via Black-Scholes so strike selection and book
@@ -245,8 +286,13 @@ export async function getOptionsChain(symbol) {
   let chain;
   try {
     chain = await chainFromCboe(symbol);
-  } catch {
-    chain = await chainFromYahoo(symbol);
+  } catch (e1) {
+    try {
+      chain = await chainFromYahoo(symbol);
+    } catch (e2) {
+      // Both sources down: say so loudly instead of dissolving into 'no mark'.
+      throw new Error(`no chain source for ${symbol} (cboe: ${e1.message}; yahoo: ${e2.message})`);
+    }
   }
   fillGreeks(chain);
   cacheSet(`chain-${symbol}`, chain);

@@ -10,11 +10,26 @@ export function performance(portfolio) {
   const grossWin = wins.reduce((a, t) => a + t.realizedPnl, 0);
   const grossLoss = Math.abs(losses.reduce((a, t) => a + t.realizedPnl, 0));
   const eq = equity(portfolio);
-  // Total modeled friction: slippage both ways plus per-contract fees. On a
-  // small account this number decides viability more than the strategy does.
-  const grossFriction = +closed.reduce(
-    (a, t) => a + (t.entrySlippageCost || 0) + (t.exitSlippageCost || 0) + (t.entryFees || 0) + (t.exitFees || 0), 0
-  ).toFixed(2);
+  // Total modeled friction: slippage both ways plus per-contract fees, on
+  // CLOSED and OPEN trades alike (the open book's entry friction is real
+  // money already spent). v1 records carried no ledger fields; their
+  // slippage is backed out of the fields they did keep. On a small account
+  // this number decides viability more than the strategy does.
+  const tradeFriction = (t) => {
+    if (t.entrySlippageCost != null || t.entryFees != null) {
+      return (t.entrySlippageCost || 0) + (t.exitSlippageCost || 0) + (t.entryFees || 0) + (t.exitFees || 0);
+    }
+    const midEntry = (t.legs || []).reduce((a, l) => a + (l.action === 'buy' ? 1 : -1) * (l.mid ?? 0) * (l.contracts ?? 0) * 100, 0);
+    const entrySlip = Number.isFinite(t.entryValue) && midEntry ? Math.max(0, t.entryValue - midEntry) : 0;
+    const exitSlip = Number.isFinite(t.currentValue) && Number.isFinite(t.exitValue) ? Math.max(0, t.currentValue - t.exitValue) : 0;
+    return entrySlip + exitSlip;
+  };
+  const closedFriction = closed.reduce((a, t) => a + tradeFriction(t), 0);
+  const openFriction = portfolio.positions.reduce((a, p) => a + (p.entrySlippageCost || 0) + (p.entryFees || 0), 0);
+  const grossFriction = +(closedFriction + openFriction).toFixed(2);
+  // Friction as a share of the price moves the bot actually caught (mid-to-
+  // mid gross per closed trade) — the honest denominator; net wins is not.
+  const midGrossAbs = closed.reduce((a, t) => a + Math.abs(t.realizedPnl + tradeFriction(t)), 0);
 
   return {
     startingEquity: portfolio.startingEquity,
@@ -30,7 +45,10 @@ export function performance(portfolio) {
     profitFactor: grossLoss > 0 ? +(grossWin / grossLoss).toFixed(2) : null,
     realizedPnl: +closed.reduce((a, t) => a + t.realizedPnl, 0).toFixed(2),
     grossFriction,
-    frictionPctOfGrossWins: grossWin > 0 ? +((grossFriction / grossWin) * 100).toFixed(1) : null,
+    closedFriction: +closedFriction.toFixed(2),
+    openFriction: +openFriction.toFixed(2),
+    frictionPctOfMidPnl: midGrossAbs > 0 ? +((closedFriction / midGrossAbs) * 100).toFixed(1) : null,
+    frictionPctOfGrossWins: grossWin > 0 ? +((grossFriction / grossWin) * 100).toFixed(1) : null, // denominator = NET realized wins
   };
 }
 
@@ -62,7 +80,11 @@ export function gateStatus(portfolio) {
   };
 }
 
-// TELEMETRY ONLY: recompute PF as if fills paid 50% of the half-spread
+// TELEMETRY ONLY: recompute PF as if fills paid 50% of the half-spread.
+// NOTE: extraCostAt50 equals the recorded slippage by construction (25% of
+// the half-spread each way; the sell-side bid clamp is inert at these
+// factors), so this is a bound, not an independent measurement — the
+// naturalFill field on each exec-log row gives the true worst case.
 // instead of the modeled 25%. Answers "would a harsher slippage assumption
 // flip the record's verdict?" without touching recorded P&L — the gate reads
 // recorded numbers, never this.

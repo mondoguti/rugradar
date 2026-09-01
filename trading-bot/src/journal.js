@@ -13,9 +13,9 @@ import { fileURLToPath } from 'node:url';
 import config from '../config.js';
 import { atmIV } from './scanner.js';
 import { liquid, pickExpiry } from './strategies.js';
-import { getDailyHistory, useFixtures } from './marketdata.js';
+import { getDailyHistory, getDailyHistoryMeta, useFixtures } from './marketdata.js';
 import { historicalVol } from './indicators.js';
-import { daysToNext } from './calendar.js';
+import { daysToNext, tradingDaysBetween, isTradingDay } from './calendar.js';
 import { etDay } from './portfolio.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -41,6 +41,28 @@ export const loadOutcomes = () => readJsonl(OUTCOMES_FILE);
 // file, deduped by date|symbol. Bounded like every best-effort pass: history
 // for symbols scanned this run is a cache hit (zero network); at most 10
 // extra fetches for departed discovery names, 60s deadline, 3-miss abort.
+// Forward labels for the row at bar index i, or null when the 21-bar future
+// is not complete yet OR the series has a hole. Contiguity is checked with
+// the trading-day calendar: bars[i+k] must be exactly k trading days after
+// bars[i] for k = 5, 10, 21. A missing bar (feed gap, dropped null-close)
+// would otherwise silently label the wrong horizon — permanently.
+export function labelFromBars(bars, i) {
+  if (i == null || i + 21 > bars.length - 1) return null;
+  const d0 = bars[i].date;
+  if (tradingDaysBetween(d0, bars[i + 5].date) !== 5 ||
+      tradingDaysBetween(d0, bars[i + 10].date) !== 10 ||
+      tradingDaysBetween(d0, bars[i + 21].date) !== 21) return null;
+  const closes = bars.map((b) => b.close);
+  if (!(closes[i] > 0) || [5, 10, 21].some((k) => !(closes[i + k] > 0))) return null;
+  const fwd = (k) => +(closes[i + k] / closes[i] - 1).toFixed(4);
+  const rv21 = historicalVol(closes.slice(i, i + 22), 21);
+  return {
+    fwdRet5: fwd(5), fwdRet10: fwd(10), fwdRet21: fwd(21),
+    rv21: rv21 != null ? +rv21.toFixed(4) : null,
+    barEnd: bars[i + 21].date,
+  };
+}
+
 export async function backfillOutcomes(scannedSymbols = new Set()) {
   const journal = loadJournal();
   if (!journal.length) return { appended: 0 };
@@ -65,7 +87,8 @@ export async function backfillOutcomes(scannedSymbols = new Set()) {
   for (const [symbol, rows] of bySymbol) {
     const live = [];
     for (const r of rows) {
-      if (r.date < tombstoneCutoff) lines.push(JSON.stringify({ date: r.date, symbol, unlabelable: true }));
+      if (r.date < tombstoneCutoff) lines.push(JSON.stringify({ date: r.date, symbol, unlabelable: true, reason: 'older-than-history-window' }));
+      else if (!isTradingDay(r.date)) lines.push(JSON.stringify({ date: r.date, symbol, unlabelable: true, reason: 'non-trading-day' }));
       else live.push(r);
     }
     if (!live.length) continue;
@@ -78,20 +101,25 @@ export async function backfillOutcomes(scannedSymbols = new Set()) {
       bars = await getDailyHistory(symbol);
       misses = 0;
     } catch { misses++; continue; }
+    // Only a source that never drops bars may write permanent labels. The
+    // Yahoo fallback skips null-close days, shifting array positions — a
+    // delay costs nothing, a wrong label is forever. Leave the rows pending.
+    const meta = getDailyHistoryMeta(symbol);
+    if (meta?.source !== 'cboe' && meta?.source !== 'stooq') continue;
     // Today's bar is PARTIAL at the 10:50 ET scan — a label written from it
     // would be permanent fiction. Only completed sessions may label outcomes.
     bars = bars.filter((b) => b.date < todayEt);
     const idx = new Map(bars.map((b, i) => [b.date, i]));
-    const closes = bars.map((b) => b.close);
     for (const r of live) {
       const i = idx.get(r.date);
-      if (i == null || i + 21 > closes.length - 1) continue; // future not written yet
-      const fwd = (k) => +(closes[i + k] / closes[i] - 1).toFixed(4);
-      const rv21 = historicalVol(closes.slice(i, i + 22), 21);
+      if (i == null) continue;
+      const label = labelFromBars(bars, i);
+      if (!label) continue; // future not written yet, or a hole in the series
       lines.push(JSON.stringify({
-        date: r.date, symbol,
-        fwdRet5: fwd(5), fwdRet10: fwd(10), fwdRet21: fwd(21),
-        rv21: rv21 != null ? +rv21.toFixed(4) : null,
+        date: r.date, symbol, ...label,
+        journalVersion: r.metricsVersion ?? 1,
+        source: meta.source,
+        adjusted: false, // split-adjusted, dividend-UNadjusted close-to-close
       }));
     }
   }

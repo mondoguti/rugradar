@@ -26,6 +26,31 @@ export function governorState(portfolio) {
   };
 }
 
+// Signed dollar delta of a leg set: Σ ±delta × contracts × 100 × spot.
+// Positions carry mark-time deltas/spot (refreshed by markPosition); tickets
+// carry their entry quotes. Same arithmetic as the status book-exposure
+// line. Returns null when any leg lacks a delta — callers fail CLOSED.
+export function deltaDollars(legs, spot) {
+  if (!(spot > 0)) return null;
+  let d = 0;
+  for (const leg of legs || []) {
+    const delta = leg.markDelta ?? leg.delta;
+    if (delta == null || !(leg.contracts > 0)) return null;
+    d += (leg.action === 'buy' ? 1 : -1) * delta * leg.contracts * 100 * spot;
+  }
+  return d;
+}
+
+export function bookDeltaDollars(portfolio) {
+  let total = 0;
+  for (const p of portfolio.positions) {
+    const d = deltaDollars(p.legs, p.spotAtMark ?? p.spot);
+    if (d == null) return null;
+    total += d;
+  }
+  return total;
+}
+
 export function riskBudget(portfolio) {
   const eq = equity(portfolio);
   // The governor can only SHRINK the budget — a pre-registered harm-reduction
@@ -82,6 +107,28 @@ export function validateTicket(ticket, portfolio) {
     );
     if (clash)
       failures.push(`correlated exposure: already ${clash.direction} ${clash.symbol} (group ${group.join('/')})`);
+  }
+
+  // Directional-exposure overlay (pre-registered 2026-09-01, see config).
+  // Two independent caps; each can only ADD a failure, never remove one.
+  const dx = config.risk.directionalExposure;
+  if (dx?.enabled) {
+    const sameDir = portfolio.positions.filter((p) => p.direction === ticket.direction).length;
+    const sameCap = Math.max(1, maxPositions - dx.sameDirectionSlotPenalty);
+    if (sameDir >= sameCap)
+      failures.push(`directional cap: already ${sameDir} ${ticket.direction} position(s) open — max ${sameCap} same-direction at ${maxPositions} slot(s)`);
+    const bookDelta = bookDeltaDollars(portfolio);
+    const ticketDelta = deltaDollars(ticket.legs, ticket.spot);
+    if (bookDelta == null || ticketDelta == null) {
+      failures.push('directional cap: a leg carries no delta — book exposure cannot be measured, refusing to add to it');
+    } else {
+      const after = bookDelta + ticketDelta;
+      const cap = dx.maxNetDeltaPctOfEquity * eq;
+      // Only ADDING exposure is gated: a ticket that shrinks |net delta| is a
+      // hedge and never fails here (it still faces every other check).
+      if (Math.abs(after) > cap && Math.abs(after) > Math.abs(bookDelta))
+        failures.push(`directional cap: net delta would be $${after.toFixed(0)} (${(after / eq).toFixed(2)}x equity), over ${dx.maxNetDeltaPctOfEquity}x — book $${bookDelta.toFixed(0)} + ticket $${ticketDelta.toFixed(0)}`);
+    }
   }
 
   const deployed = portfolio.positions.reduce((a, p) => a + p.entryValue, 0);

@@ -64,6 +64,11 @@ export default {
       ['F', 'RIVN'],
     ],
     dailyLossLimitPct: 0.10,    // stop opening new trades after -10% day
+                                // KNOWN BLIND SPOT (verified 2026-09-01, number deliberately unchanged):
+                                // this sees REALIZED P&L only, and afternoon closes never precede a
+                                // same-day scan — a full stop-out of a 3-position book realizes ~8.6%,
+                                // under the 10% line. Book-level exposure is handled by
+                                // directionalExposure below, not by this limit.
     // Drawdown governor — PRE-REGISTERED 2026-08-06 at trade #1, before the
     // record could bias it. A pure de-risking overlay (can only REDUCE size
     // and slots, never add): a multi-week bleed otherwise trips nothing —
@@ -76,6 +81,32 @@ export default {
         { ddPct: 0.25, riskFactor: 0,   slotPenalty: 99 }, // -25%: new entries halted pending human review
       ],
       releaseAtRecoveryPct: 0.05, // disengage only once equity is back within 5% of the high-water
+    },
+    // Directional-exposure cap — PRE-REGISTERED 2026-09-01 on the forward
+    // record. Book on that date: 3 bullish / 0 bearish debit spreads, net
+    // delta $5,400 = 2.84x equity, all expiring inside one 3-week window
+    // spanning CPI 09-11 and FOMC 09-16. A -3% index day at beta 1 costs
+    // ~8% of equity in one session, a -6% day ~13-17% — straight through
+    // the governor's 15% rung before any exit rule can act (stops are only
+    // evaluated at the two daily marks). None of the existing gates see
+    // direction: correlatedGroups is four static sector pairs, maxDeployedPct
+    // was 43% utilized, maxPositions counts slots not bets, dailyLossLimitPct
+    // sees realized P&L only.
+    // A pure de-risking overlay in the drawdownGovernor mould: it can only
+    // REJECT a new entry — never add size, never touch an open position or
+    // an exit rule — so the trade set under it is a strict subset of the
+    // frozen strategy's. Numbers come from the tier schedule and the governor
+    // line, not a backtest: 2.0x equity of net delta bounds a -6% index day
+    // at ~12% of equity (delta-only; under the 15% rung-1 trigger) and a -3%
+    // day at ~6%; it admits the 2026-08-20 book (1.52x) and rejects the
+    // 2026-08-27 add (2.56x). Same-direction slots = tier slots minus one, so
+    // one slot can only ever be filled against the book, or stay empty.
+    // Composes with the governor: rung 1 (2 slots) => 1 same-direction slot.
+    directionalExposure: {
+      enabled: true,
+      maxNetDeltaPctOfEquity: 2.0,   // |book delta$ + ticket delta$| <= 2.0 x equity (hedges always pass)
+      sameDirectionSlotPenalty: 1,   // same-direction positions <= max(1, slots - 1)
+      registeredAt: '2026-09-01',
     },
     pdt: {
       enabled: true,            // accounts under $25k: max 3 day trades per 5 trading days
@@ -189,5 +220,10 @@ export default {
     slippage: 0.25,             // paper fills assume you give up 25% of the half-spread
     feePerContract: 0.04,       // regulatory/exchange fees per contract per side
                                 // (Robinhood is commission-free but passes these through)
+    // DATA-INTEGRITY parameters (not strategy thresholds): CBOE regenerates
+    // chain snapshots lazily, so a "fresh" fetch can carry hours-old quotes.
+    // A paper close on such a snapshot is fiction in the permanent record.
+    maxQuoteAgeMin: 45,         // older than this = quote-stale: fills deferred, tickets refused
+    maxStaleDeferrals: 2,       // a stale-quote exit is deferred at most this many runs, then fills anyway
   },
 };

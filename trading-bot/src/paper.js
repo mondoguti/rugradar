@@ -3,7 +3,8 @@
 // works before a single real dollar moves.
 
 import config from '../config.js';
-import { getOptionsChain, getDailyHistory } from './marketdata.js';
+import { getOptionsChain, getDailyHistory, chainAgeMin } from './marketdata.js';
+import { isRegularSession } from './calendar.js';
 import { ema, atr } from './indicators.js';
 import { savePortfolio, etDay, appendExecLog } from './portfolio.js';
 import { canDayTrade } from './risk.js';
@@ -20,6 +21,11 @@ function slip(price, half) {
 }
 
 export function executeTicketPaper(ticket, portfolio) {
+  // No paper fill outside the regular session: off-session quotes are the
+  // prior close wearing today's date (the BBAI 23:04 ET fill was exactly that).
+  if (!isRegularSession()) {
+    return { blocked: true, reason: 'outside the regular session (09:30-16:00 ET on a trading day) — refusing a paper fill on off-session quotes' };
+  }
   const isCredit = ticket.netCredit != null;
   // Per-leg fills, symmetric for every structure: buys pay worse than mid,
   // sells receive worse than mid. (Credit entries used to fill at raw mid —
@@ -70,6 +76,8 @@ export function executeTicketPaper(ticket, portfolio) {
     thesis: ticket.thesis,
     spot: ticket.spot,
     macro: ticket.macro ?? null,       // FOMC/CPI context at entry — closed trades keep it
+    chainAsOf: ticket.chainAsOf ?? null,   // when the entry chain snapshot was generated
+    chainSpot: ticket.chainSpot ?? null,   // the spot that snapshot priced (ticket.spot = history close)
     earningsDate: ticket.earningsDate ?? null,
     entrySlippageCost,
     entryFees,
@@ -98,6 +106,12 @@ export function executeTicketPaper(ticket, portfolio) {
     })),
     midValue, fillValue: fillNet, slippage: entrySlippageCost, fees: entryFees,
     shadow: { extraCostAt50: +shadowExtra.toFixed(2) },
+    // Natural fill = buy at the ask / sell at the bid: the worst-case bound
+    // that gives the shadow metric an independent [mid, natural] band.
+    naturalFill: +ticket.legs.reduce((a, leg) => a + (leg.action === 'buy' ? leg.ask : -leg.bid) * leg.contracts * 100, 0).toFixed(2),
+    quoteAt: ticket.chainAsOf ?? null,
+    quoteAgeMin: ticket.chainAsOf ? +((Date.now() - Date.parse(ticket.chainAsOf)) / 60000).toFixed(1) : null,
+    chainSpot: ticket.chainSpot ?? null,
   });
   return position;
 }
@@ -114,13 +128,28 @@ function legQuote(chain, leg) {
 // paper results don't flatter themselves — entries already pay slippage).
 export async function markPosition(pos) {
   const chain = await getOptionsChain(pos.symbol);
+  // Snapshot provenance: the record keeps its numbers, but every mark now
+  // says how old the quotes behind it were. Quote-stale marks defer paper
+  // closes (see closePositionPaper) instead of filling at fiction.
+  const age = chainAgeMin(chain);
+  pos.markQuoteAt = chain.asOf ?? null;
+  pos.markQuoteAgeMin = age != null ? +age.toFixed(1) : null;
+  pos.quoteStale = age != null && age > config.data.maxQuoteAgeMin;
+  if (!pos.quoteStale) pos.staleDeferrals = 0;
   let value = 0;       // at mid
   let exitValue = 0;   // what you'd actually collect/pay closing, with slippage
   let stale = false;
+  let band = 0;        // Σ half-spread × contracts × 100: today's ± quote-width band
   for (const leg of pos.legs) {
-    const q = legQuote(chain, leg);
+    let q = legQuote(chain, leg);
+    // A SHORT leg with a zero bid but a live ask is still closeable — at the
+    // ask. Valuing it there is the conservative cost-to-close (never
+    // flatters) and keeps the spread markable instead of marooning it in
+    // the stale path until a blind total-loss settlement.
+    if (q && leg.action === 'sell' && !(q.bid > 0) && q.ask > 0) q = { ...q, mid: q.ask };
     if (q?.mid == null) { stale = true; continue; }
     const half = (q.ask - q.bid) / 2;
+    band += Math.abs(half) * leg.contracts * 100;
     // closing reverses the leg: bought legs get sold (receive less than mid),
     // sold legs get bought back (pay more than mid)
     const closePx = leg.action === 'buy'
@@ -138,6 +167,8 @@ export async function markPosition(pos) {
     leg.markIv = q.iv ?? null;
     leg.markTheta = q.theta ?? bsTheta(gp);
     leg.markVega = q.vega ?? bsVega(gp);
+    leg.markGamma = q.gamma ?? null;
+    leg.markSpreadPct = q.mid > 0 ? +((q.ask - q.bid) / q.mid).toFixed(4) : null;
   }
   const isCredit = pos.entryCredit != null;
   // A stale mark (any leg unquoted) must never overwrite the position's
@@ -160,6 +191,15 @@ export async function markPosition(pos) {
     // track the high-water mark for the trailing stop
     pos.peakPnl = Math.max(pos.peakPnl ?? 0, pos.unrealizedPnl);
     pos.markFailures = 0;
+    // Mark-quality telemetry: how wide today's quotes were, and for debit
+    // spreads how far the -50% stop sits relative to that width (a stop line
+    // inside the band is quote noise, not price).
+    pos.markBand = +band.toFixed(2);
+    if (!isCredit && pos.structure.includes('spread')) {
+      const stopDistance = pos.unrealizedPnl + config.exits.stopLossPct.debitSpread * pos.entryValue;
+      pos.stopDistance = +stopDistance.toFixed(2);
+      pos.stopDistanceOverBand = band > 0 ? +(stopDistance / band).toFixed(2) : null;
+    }
   }
   pos.markStale = stale;
   pos.spotAtMark = chain.spot ?? pos.spotAtMark;
@@ -169,6 +209,7 @@ export async function markPosition(pos) {
   if (!isCredit && !pos.structure.includes('spread')) {
     try {
       const bars = await getDailyHistory(pos.symbol);
+      pos.thesisBarDate = bars[bars.length - 1]?.date ?? null; // the completed bar the thesis was judged on (one session behind intraday)
       const closes = bars.map((b) => b.close);
       const e20 = ema(closes, 20);
       const a = atr(bars, 14);
@@ -250,6 +291,14 @@ export function closePositionPaper(pos, portfolio, reason) {
   if (pos.markStale) {
     return { blocked: true, reason: 'mark is stale — refusing to fill a paper close at unreliable prices' };
   }
+  // Quote-stale (snapshot older than maxQuoteAgeMin): defer the fill to the
+  // next run, at most maxStaleDeferrals times, and never inside the last day
+  // (dte > 1 keeps deferral from drifting into blind settlement). If it must
+  // fill anyway, the record says so.
+  if (pos.quoteStale && (pos.staleDeferrals || 0) < config.data.maxStaleDeferrals && pos.dte > 1) {
+    pos.staleDeferrals = (pos.staleDeferrals || 0) + 1;
+    return { blocked: true, reason: `quote snapshot is ${pos.markQuoteAgeMin} min old — deferring the fill to the next run (${pos.staleDeferrals}/${config.data.maxStaleDeferrals})` };
+  }
 
   if (openedToday && !canDayTrade(portfolio)) {
     return { blocked: true, reason: 'PDT: closing today would be a 4th day trade — hold until tomorrow unless catastrophic' };
@@ -285,6 +334,7 @@ export function closePositionPaper(pos, portfolio, reason) {
     realizedPnl,
     exitSlippageCost,
     exitFees,
+    filledOnStaleQuoteMin: pos.quoteStale ? pos.markQuoteAgeMin : null,
   });
   if (openedToday) {
     portfolio.dayTrades.push({ date: new Date().toISOString(), symbol: pos.symbol, id: pos.id });
@@ -307,6 +357,10 @@ export function closePositionPaper(pos, portfolio, reason) {
     })),
     midValue: midCloseValue, fillValue: proceeds, slippage: exitSlippageCost, fees: exitFees,
     shadow: { extraCostAt50: +shadowExtraClose.toFixed(2) },
+    naturalFill: +pos.legs.reduce((a, leg) => a + (leg.markBid != null && leg.markAsk != null ? (leg.action === 'buy' ? leg.markBid : -leg.markAsk) * leg.contracts * 100 : 0), 0).toFixed(2),
+    quoteAt: pos.markQuoteAt ?? null,
+    quoteAgeMin: pos.markQuoteAgeMin ?? null,
+    filledOnStaleQuoteMin: pos.quoteStale ? pos.markQuoteAgeMin : null,
   });
   return { blocked: false, realizedPnl };
 }

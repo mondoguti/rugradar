@@ -8,6 +8,9 @@
 
 import crypto from 'node:crypto';
 import config from '../config.js';
+import { chainAgeMin } from './marketdata.js';
+import { isRegularSession } from './calendar.js';
+import { etDay } from './portfolio.js';
 
 export function liquid(c) {
   const L = config.entries.liquidity;
@@ -50,6 +53,10 @@ function ticketBase(signal, structure) {
     structure,
     status: 'pending',
     thesis: signal.reasons.join('; '),
+    // Quote provenance: when the chain snapshot was generated and what spot
+    // it priced — so an entry can never again hide a stale-quote fill.
+    chainAsOf: signal.chain?.asOf ?? null,
+    chainSpot: signal.chain?.spot ?? null,
   };
 }
 
@@ -194,6 +201,19 @@ function chainUsable(chain) {
 export function buildTicket(signal, riskBudget) {
   if (!signal.chain) return { skipped: true, symbol: signal.symbol, reason: 'no chain data' };
   if (signal.direction === 'neutral') return { skipped: true, symbol: signal.symbol, reason: 'no directional edge' };
+  // Session + provenance guards (pure tightening — none can add a trade):
+  // no ticket outside 09:30-16:00 ET, none off a stale snapshot, none when
+  // the chain's last trade belongs to a prior session, and none when the
+  // chain and history feeds disagree about which session they are on.
+  if (!isRegularSession())
+    return { skipped: true, symbol: signal.symbol, reason: 'outside the regular session (09:30-16:00 ET on a trading day) — no ticket' };
+  const age = chainAgeMin(signal.chain);
+  if (age != null && age > config.data.maxQuoteAgeMin)
+    return { skipped: true, symbol: signal.symbol, reason: `chain snapshot is ${age.toFixed(0)} min old — refusing to price a ticket off stale quotes` };
+  if (signal.chain.lastTradeAt && String(signal.chain.lastTradeAt).slice(0, 10) !== etDay())
+    return { skipped: true, symbol: signal.symbol, reason: `chain's last trade is from ${String(signal.chain.lastTradeAt).slice(0, 10)}, not today — prior-session snapshot` };
+  if (signal.chain.prevClose != null && signal.close > 0 && Math.abs(signal.chain.prevClose - signal.close) / signal.close > 0.005)
+    return { skipped: true, symbol: signal.symbol, reason: `chain prev close ${signal.chain.prevClose} vs history close ${signal.close} — feeds are on different sessions` };
   if (!chainUsable(signal.chain))
     return { skipped: true, symbol: signal.symbol, reason: 'options quotes degraded (market closed?) — rescan 9:45am-4pm ET' };
 

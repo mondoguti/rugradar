@@ -146,6 +146,24 @@ re-tuning on backtests manufactures fake edges. New ideas follow one road:
 - Tier boundary wrinkle for gate-pace planning: the per-trade budget is $375
   at exactly $5,000 equity (7.5% tier) but drops to $250 at $5,001 (5% tier),
   regaining $375 only at $7,500 — target ~$7,500, not $5,000.
+- Forward-record forensics (2026-09-01): CBOE chain snapshots turned out to
+  regenerate lazily (a "fresh" fetch can carry hours-old quotes); the LAC entry
+  on 2026-08-21 priced the prior close (~$50 of its −$86.73), and the BBAI
+  trade was built off-session at 23:04 ET. From this date every ticket and
+  mark records the snapshot's own timestamp (`chainAsOf` / `markQuoteAt`),
+  tickets are refused outside 09:30–16:00 ET or off snapshots older than
+  `data.maxQuoteAgeMin`, and paper closes on stale snapshots are deferred
+  (`filledOnStaleQuoteMin` marks the ones that filled anyway). Earlier fills
+  are left exactly as recorded — annotated forward, never rewritten.
+- Directional-exposure cap, PRE-REGISTERED 2026-09-01 (`risk.directionalExposure`,
+  rulebook id `directional-exposure-cap`): net delta ≤ 2.0× equity and
+  same-direction positions ≤ slots − 1. Rejection-only; it never touches an
+  open position. On the record so far it would have refused the KO entry of
+  2026-08-27 and nothing else.
+- Outcome labels (`data/outcomes.jsonl`) are split-adjusted, dividend-
+  UNadjusted close-to-close returns over exactly 5/10/21 trading days from the
+  CBOE history feed, written only when the series is contiguous (no feed
+  holes) and never from the Yahoo fallback.
 - PDT semantics change (effective 2026-08-07): the day-trade window now
   counts actual NYSE trading days (FINRA's rule) instead of 7.0 calendar
   days. More conservative around holidays; business-day-granular otherwise —

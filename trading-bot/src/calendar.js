@@ -15,6 +15,7 @@
 // coverageWarnings() nags until the calendar is verified and extended.
 
 import { etDay } from './portfolio.js';
+import { useFixtures } from './marketdata.js';
 
 export const MACRO_2026 = {
   verifiedAt: '2026-08-06',
@@ -54,7 +55,7 @@ export const MARKET_HOLIDAYS = new Set([
 ]);
 const HOLIDAY_COVERAGE_END = '2027-12-31';
 
-const isTradingDay = (isoDay) => {
+export const isTradingDay = (isoDay) => {
   const dow = new Date(`${isoDay}T12:00:00Z`).getUTCDay();
   return dow >= 1 && dow <= 5 && !MARKET_HOLIDAYS.has(isoDay);
 };
@@ -76,6 +77,20 @@ export function tradingDaysBetween(fromEtDay, toEtDay) {
     if (isTradingDay(d.toISOString().slice(0, 10))) count++;
   }
   return count;
+}
+
+// True only inside the regular session (09:30-16:00 ET on a trading day).
+// A ticket built or a paper fill taken outside it prices off-session quotes —
+// the BBAI trade (2026-08-04 23:04 ET) was exactly that: a signal one session
+// behind a chain that already held the next close. Fixture runs are exempt.
+export function isRegularSession(now = new Date()) {
+  if (useFixtures()) return true;
+  const day = etDay(now);
+  if (!isTradingDay(day)) return false;
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour12: false, hour: '2-digit', minute: '2-digit' }).formatToParts(now);
+  const get = (t) => parts.find((x) => x.type === t)?.value ?? '00';
+  const hhmm = `${String(get('hour')).padStart(2, '0')}:${get('minute')}`;
+  return hhmm >= '09:30' && hhmm < '16:00';
 }
 
 // Next event of a type on/after `from` — {date, days} or null past coverage.
