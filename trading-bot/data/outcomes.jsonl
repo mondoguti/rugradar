@@ -1,0 +1,14 @@
+{"date":"2026-08-04","symbol":"WMT","fwdRet5":0.0153,"fwdRet10":0.0327,"fwdRet21":-0.0489,"rv21":0.3826,"barEnd":"2026-09-02","journalVersion":1,"source":"cboe","adjusted":false}
+{"date":"2026-08-04","symbol":"IWM","fwdRet5":-0.0024,"fwdRet10":-0.0049,"fwdRet21":-0.0255,"rv21":0.1264,"barEnd":"2026-09-02","journalVersion":1,"source":"cboe","adjusted":false}
+{"date":"2026-08-04","symbol":"PLTR","fwdRet5":0.0755,"fwdRet10":0.0546,"fwdRet21":0.0418,"rv21":0.5563,"barEnd":"2026-09-02","journalVersion":1,"source":"cboe","adjusted":false}
+{"date":"2026-08-04","symbol":"KO","fwdRet5":-0.0009,"fwdRet10":0.0261,"fwdRet21":0.0194,"rv21":0.1472,"barEnd":"2026-09-02","journalVersion":1,"source":"cboe","adjusted":false}
+{"date":"2026-08-04","symbol":"F","fwdRet5":-0.0183,"fwdRet10":-0.0218,"fwdRet21":-0.007,"rv21":0.3216,"barEnd":"2026-09-02","journalVersion":1,"source":"cboe","adjusted":false}
+{"date":"2026-08-04","symbol":"MARA","fwdRet5":-0.1762,"fwdRet10":-0.2374,"fwdRet21":-0.1089,"rv21":0.9545,"barEnd":"2026-09-02","journalVersion":1,"source":"cboe","adjusted":false}
+{"date":"2026-08-04","symbol":"UBER","fwdRet5":0.091,"fwdRet10":0.0371,"fwdRet21":0.062,"rv21":0.4633,"barEnd":"2026-09-02","journalVersion":1,"source":"cboe","adjusted":false}
+{"date":"2026-08-04","symbol":"PFE","fwdRet5":0.0476,"fwdRet10":0.0724,"fwdRet21":0.1421,"rv21":0.2248,"barEnd":"2026-09-02","journalVersion":1,"source":"cboe","adjusted":false}
+{"date":"2026-08-04","symbol":"DKNG","fwdRet5":0.0733,"fwdRet10":0.0182,"fwdRet21":0.0254,"rv21":0.6403,"barEnd":"2026-09-02","journalVersion":1,"source":"cboe","adjusted":false}
+{"date":"2026-08-04","symbol":"INTC","fwdRet5":-0.0312,"fwdRet10":-0.0414,"fwdRet21":-0.1072,"rv21":0.4375,"barEnd":"2026-09-02","journalVersion":1,"source":"cboe","adjusted":false}
+{"date":"2026-08-04","symbol":"QQQ","fwdRet5":-0.0075,"fwdRet10":-0.0088,"fwdRet21":-0.0202,"rv21":0.1289,"barEnd":"2026-09-02","journalVersion":1,"source":"cboe","adjusted":false}
+{"date":"2026-08-04","symbol":"AMD","fwdRet5":-0.0853,"fwdRet10":-0.0659,"fwdRet21":-0.1186,"rv21":0.4869,"barEnd":"2026-09-02","journalVersion":1,"source":"cboe","adjusted":false}
+{"date":"2026-08-04","symbol":"HOOD","fwdRet5":0.0093,"fwdRet10":-0.0212,"fwdRet21":0.1442,"rv21":0.6972,"barEnd":"2026-09-02","journalVersion":1,"source":"cboe","adjusted":false}
+{"date":"2026-08-04","symbol":"BAC","fwdRet5":0.0175,"fwdRet10":0.0211,"fwdRet21":-0.0048,"rv21":0.1677,"barEnd":"2026-09-02","journalVersion":1,"source":"cboe","adjusted":false}

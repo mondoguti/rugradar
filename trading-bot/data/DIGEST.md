@@ -1,12 +1,12 @@
 # Trading Bot — Owner Digest
 
-_Auto-generated 2026-09-02T19:45:47.125Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
+_Auto-generated 2026-09-03T14:51:46.716Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
 
 ## Your account
 
-Your paper account is worth **$1831.29** (started at $2000.00, down 8.44%).
-- **BAC**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $152.25, now marked at $112.50 (down $39.75).
-- **GM**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $98.88, now marked at $97.50 (down $1.38).
+Your paper account is worth **$1839.29** (started at $2000.00, down 8.04%).
+- **BAC**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $152.25, now marked at $118.50 (down $33.75).
+- **GM**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $98.88, now marked at $99.50 (up $0.62).
 
 ## Recent trades (last 10)
 
@@ -27,11 +27,12 @@ Friction is the silent killer of small accounts. The model is fair on tight quot
 
 ## System health
 
-Last scheduled run: 2026-09-02T19:45:47.104Z (manage).
-Research dataset: 508 daily volatility snapshots collected so far (grows every scan; becomes tradeable evidence at ~120 days).
+Last scheduled run: 2026-09-03T14:51:46.713Z (autopilot).
+Research dataset: 538 daily volatility snapshots collected so far (grows every scan; becomes tradeable evidence at ~120 days).
 
 ## Needs your attention
 
-- Your 2 positions all profit only if stocks rise; net exposure is 2.04x your equity — a 3% market move against you would cost about $112.35 in one day.
+- Ticket **NOK** is HELD until someone verifies the earnings date: if earnings land before 2026-10-02, discard it; otherwise set it back to "pending".
+- Your 2 positions all profit only if stocks rise; net exposure is 2.07x your equity — a 3% market move against you would cost about $114.40 in one day.
 - Positions holding through scheduled market-moving events: 2 through the CPI release on 2026-09-11, 2 through the FOMC decision on 2026-09-16 — expect sharp moves around those releases.
-- **GM**'s latest price snapshot was 108.6 minutes old when marked — treat its mark as approximate.
+- **GM**'s latest price snapshot was 50 minutes old when marked — treat its mark as approximate.
