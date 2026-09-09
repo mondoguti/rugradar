@@ -22,9 +22,15 @@ export const MACRO_2026 = {
   sources: [
     'https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm',
     'https://www.bls.gov/schedule/news_release/cpi.htm (via dated archive URLs; gov pages blocked from this environment)',
+    // 2026-09-09 extension (Oct-Dec CPI): bls.gov unreachable from this
+    // environment, so the dates were cross-checked against two independent
+    // settlement-market calendars that resolve ON the release —
+    // robinhood.com/us/en/prediction-markets/economics/events/cpi-in-{september-oct-14,october-nov-10,november-dec-10}-2026
+    // and polymarkettrader.com/events/us-cpi-2026 — both also matching the
+    // already-verified Aug 12 / Sep 11 entries. Re-verify against BLS when reachable.
   ],
   fomc: ['2026-01-28', '2026-03-18', '2026-04-29', '2026-06-17', '2026-07-29', '2026-09-16', '2026-10-28', '2026-12-09'],
-  cpi: ['2026-01-13', '2026-02-13', '2026-03-11', '2026-04-10', '2026-05-12', '2026-06-10', '2026-07-14', '2026-08-12', '2026-09-11'],
+  cpi: ['2026-01-13', '2026-02-13', '2026-03-11', '2026-04-10', '2026-05-12', '2026-06-10', '2026-07-14', '2026-08-12', '2026-09-11', '2026-10-14', '2026-11-10', '2026-12-10'],
 };
 
 // US market holidays (NYSE full closures), for trading-day arithmetic.
