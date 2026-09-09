@@ -1,12 +1,12 @@
 # Trading Bot — Owner Digest
 
-_Auto-generated 2026-09-09T14:52:11.955Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
+_Auto-generated 2026-09-09T19:45:57.429Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
 
 ## Your account
 
-Your paper account is worth **$1816.72** (started at $2000.00, down 9.16%).
-- **BAC**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $152.25, now marked at $132.00 (down $20.25).
-- **GM**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $98.88, now marked at $116.00 (up $17.12).
+Your paper account is worth **$1799.22** (started at $2000.00, down 10.04%).
+- **BAC**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $152.25, now marked at $133.50 (down $18.75).
+- **GM**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $98.88, now marked at $97.00 (down $1.88).
 
 ## Recent trades (last 10)
 
@@ -28,10 +28,10 @@ Friction is the silent killer of small accounts. The model is fair on tight quot
 
 ## System health
 
-Last scheduled run: 2026-09-09T14:52:11.951Z (autopilot).
+Last scheduled run: 2026-09-09T19:45:57.408Z (manage).
 Research dataset: 704 daily volatility snapshots collected so far (grows every scan; becomes tradeable evidence at ~120 days).
 
 ## Needs your attention
 
-- Your 2 positions all profit only if stocks rise; net exposure is 2.31x your equity — a 3% market move against you would cost about $126.08 in one day.
+- Your 2 positions all profit only if stocks rise; net exposure is 2.40x your equity — a 3% market move against you would cost about $129.51 in one day.
 - Positions holding through scheduled market-moving events: 2 through the CPI release on 2026-09-11, 2 through the FOMC decision on 2026-09-16 — expect sharp moves around those releases.
