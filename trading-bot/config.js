@@ -1,0 +1,229 @@
+// Central configuration for the options bot.
+// Every risk number here is a hard limit enforced by src/risk.js — the bot
+// refuses to produce a ticket that violates them.
+
+export default {
+  account: {
+    startingEquity: 2000,       // paper balance — mirrors the intended go-live
+                                // funding so the record tests the real account
+  },
+
+  // Liquid, optionable underlyings. ETFs first (tightest spreads), then
+  // lower-priced liquid names where a $500 account can actually afford premium.
+  universe: [
+    'SPY', 'QQQ', 'IWM',
+    'AAPL', 'AMD', 'INTC', 'PLTR', 'HOOD',
+    'SOFI', 'F', 'BAC', 'T', 'AAL', 'RIVN', 'MARA',
+    // liquid perennials — some too pricey for $50 long options today, but they
+    // feed the IV journal and become tradeable with spreads / a bigger account
+    'NVDA', 'TSLA', 'GM', 'PFE', 'WMT', 'KO', 'SNAP', 'UBER', 'CCL', 'DKNG',
+  ],
+
+  // JOURNAL-ONLY universe — these symbols feed data/iv-history.jsonl and
+  // outcomes.jsonl daily but are NEVER scanned for tickets. Chain-verified
+  // liquid names (2026-08-07 screen) that small-account structures could
+  // plausibly trade someday; promotion to `universe` is an owner commit, not
+  // a code change. Correlated clusters noted: MARA/RIOT/CORZ/BITO(/IBIT),
+  // AAL/JBLU.
+  journalUniverse: [
+    'CORZ', 'RGTI', 'ACHR', 'HL', 'RIOT', 'PBR', 'LUNR', 'GDX', 'CELH',
+    'JBLU', 'AGNC', 'VALE', 'UNG', 'NIO', 'WOLF', 'BMNR', 'RIG', 'BITO',
+    'RDW', 'NVDL', 'SMR', 'ONDS', 'PATH', 'SLV', 'IBIT',
+  ],
+
+  // Dynamic discovery: each scan also pulls trending / most-active / top-gainer
+  // tickers and runs them through the SAME signal and risk gates as the static
+  // list. Widens the funnel; never lowers the bar.
+  discovery: {
+    enabled: true,
+    max: 15,                    // at most this many discovered names per scan
+    maxTotal: 40,               // hard cap on total universe size
+    priceRange: [3, 300],       // skip junk (<$3) and unaffordable (>$300) movers
+  },
+
+  risk: {
+    // Graduated sizing — the rinse-and-repeat schedule. As equity compounds,
+    // dollars risked per trade (and therefore contract counts) grow
+    // automatically, while the PERCENTAGE risked steps down because there's
+    // more account to protect. Position slots also unlock with size.
+    //   $500 start:  10% = $50/trade, 2 positions
+    //   at $2,000:  7.5% = $150/trade, 3 positions
+    //   at $10,000:   5% = $500/trade, 4 positions
+    tiers: [
+      { upToEquity: 1000,     riskPct: 0.10,  maxPositions: 2 },
+      { upToEquity: 5000,     riskPct: 0.075, maxPositions: 3 },
+      { upToEquity: Infinity, riskPct: 0.05,  maxPositions: 4 },
+    ],
+    maxDeployedPct: 0.40,       // at most 40% of equity in open premium at once
+    // Same-direction positions within a group are one bet in two costumes —
+    // the validator rejects the second one.
+    correlatedGroups: [
+      ['SPY', 'QQQ', 'IWM'],
+      ['AMD', 'INTC'],
+      ['SOFI', 'HOOD', 'BAC'],
+      ['F', 'RIVN'],
+    ],
+    dailyLossLimitPct: 0.10,    // stop opening new trades after -10% day
+                                // KNOWN BLIND SPOT (verified 2026-09-01, number deliberately unchanged):
+                                // this sees REALIZED P&L only, and afternoon closes never precede a
+                                // same-day scan — a full stop-out of a 3-position book realizes ~8.6%,
+                                // under the 10% line. Book-level exposure is handled by
+                                // directionalExposure below, not by this limit.
+    // Drawdown governor — PRE-REGISTERED 2026-08-06 at trade #1, before the
+    // record could bias it. A pure de-risking overlay (can only REDUCE size
+    // and slots, never add): a multi-week bleed otherwise trips nothing —
+    // dailyLossLimitPct only sees same-day realized losses. Escalates
+    // immediately, releases only after near-full recovery (hysteresis).
+    drawdownGovernor: {
+      enabled: true,
+      rungs: [
+        { ddPct: 0.15, riskFactor: 0.5, slotPenalty: 1 },  // -15% off high-water: half risk, one fewer slot
+        { ddPct: 0.25, riskFactor: 0,   slotPenalty: 99 }, // -25%: new entries halted pending human review
+      ],
+      releaseAtRecoveryPct: 0.05, // disengage only once equity is back within 5% of the high-water
+    },
+    // Directional-exposure cap — PRE-REGISTERED 2026-09-01 on the forward
+    // record. Book on that date: 3 bullish / 0 bearish debit spreads, net
+    // delta $5,400 = 2.84x equity, all expiring inside one 3-week window
+    // spanning CPI 09-11 and FOMC 09-16. A -3% index day at beta 1 costs
+    // ~8% of equity in one session, a -6% day ~13-17% — straight through
+    // the governor's 15% rung before any exit rule can act (stops are only
+    // evaluated at the two daily marks). None of the existing gates see
+    // direction: correlatedGroups is four static sector pairs, maxDeployedPct
+    // was 43% utilized, maxPositions counts slots not bets, dailyLossLimitPct
+    // sees realized P&L only.
+    // A pure de-risking overlay in the drawdownGovernor mould: it can only
+    // REJECT a new entry — never add size, never touch an open position or
+    // an exit rule — so the trade set under it is a strict subset of the
+    // frozen strategy's. Numbers come from the tier schedule and the governor
+    // line, not a backtest: 2.0x equity of net delta bounds a -6% index day
+    // at ~12% of equity (delta-only; under the 15% rung-1 trigger) and a -3%
+    // day at ~6%; it admits the 2026-08-20 book (1.52x) and rejects the
+    // 2026-08-27 add (2.56x). Same-direction slots = tier slots minus one, so
+    // one slot can only ever be filled against the book, or stay empty.
+    // Composes with the governor: rung 1 (2 slots) => 1 same-direction slot.
+    directionalExposure: {
+      enabled: true,
+      maxNetDeltaPctOfEquity: 2.0,   // |book delta$ + ticket delta$| <= 2.0 x equity (hedges always pass)
+      sameDirectionSlotPenalty: 1,   // same-direction positions <= max(1, slots - 1)
+      registeredAt: '2026-09-01',
+    },
+    pdt: {
+      enabled: true,            // accounts under $25k: max 3 day trades per 5 trading days
+      maxDayTrades: 3,
+      windowDays: 5,
+    },
+  },
+
+  entries: {
+    minScore: 65,               // signal score 0-100 required to trade
+    maxTicketsPerScan: 3,
+    dte: {                      // days-to-expiration windows per structure
+      long: [25, 60],
+      debitSpread: [21, 45],
+      creditSpread: [21, 45],
+    },
+    delta: {                    // strike selection targets (absolute delta)
+      longEntry: 0.55,
+      longMin: 0.35,            // NEVER buy below this — far-OTM "cheap" options are lottery tickets
+      debitBuy: 0.55,
+      debitSell: 0.30,
+      creditSell: 0.25,
+      nearTolerance: 0.15,      // reject if best liquid strike is further than this from target
+    },
+    // Cheap-contract discipline: cap the premium per contract and buy
+    // multiples instead of one expensive ATM option. The $500-era budget
+    // enforced this by accident and coincided with the only positive windows;
+    // the $2k backtest without it collapsed (PF 0.51). Null disables.
+    maxPremiumPerContract: 50,
+    maxSpreadWidth: 5,          // max $ width between spread strikes
+    minCreditFractionOfWidth: 0.25, // credit spreads must collect >=25% of width or skip
+    liquidity: {
+      minOpenInterest: 100,
+      minBid: 0.05,
+      maxBidAskPctOfMid: 0.18,  // reject contracts with spreads wider than 18% of mid
+    },
+    ivRegime: {                 // ATM IV divided by 20-day historical volatility
+      rich: 1.25,               // above this: premium is expensive -> sell it (spreads) or stand aside
+      cheap: 0.90,              // below this: premium is cheap -> buying is acceptable
+    },
+    // SPY regime filter — OFF by default. The 2x2 test (2026-08) showed it
+    // helping the tuned window while inverting the out-of-sample one
+    // (PF 0.54, -14.2%), the classic overfit signature. Per the
+    // pre-registered rule (must hold on BOTH windows) it stays disabled
+    // until new evidence clears it.
+    marketRegimeFilter: false,
+  },
+
+  exits: {
+    // Let winners RUN: when a long/debit position reaches armAtPct, instead of
+    // taking profit it arms a trailing stop — the trade stays on as long as
+    // the move continues, and closes only after giving back giveBackPct of its
+    // peak gain. Asymmetric exits are where outsized winners come from.
+    trailing: {
+      enabled: true,
+      armAtPct: 0.60,           // arm the trail at +60% on the position
+      giveBackPct: 0.35,        // close after retracing 35% from peak P&L
+    },
+    profitTargetPct: {
+      long: 0.75,               // fixed target used only when trailing is disabled
+      debitSpread: 0.60,        // spreads have capped max gain — fixed targets stay
+      creditSpread: 0.50,       // buy back credit spreads at 50% of credit captured
+    },
+    // Long options exit on the CHART, not the option price. Premium-percentage
+    // stops harvest noise — an ATM option swings 30-50% on ordinary days (the
+    // first real backtest proved it: 61 of 93 trades died at a -50% premium
+    // stop). Instead: exit when the underlying breaks the setup, with a deep
+    // hard stop only as gap insurance. Position size assumes the FULL premium
+    // is at risk.
+    long: {
+      thesisStopAtrMult: 0.5,   // exit when underlying closes beyond EMA20 by this many ATRs against the trade
+      hardStopPct: 0.65,        // gap backstop on the premium itself
+    },
+    stopLossPct: {
+      debitSpread: 0.50,
+      creditSpread: 1.00,       // close credit spreads when loss equals credit received
+    },
+    timeExitDTE: 7,             // never hold long premium inside 7 DTE (gamma/theta burn)
+    maxHoldDays: 30,
+  },
+
+  // Go-live gate — FROZEN 2026-08-06. The paper record must clear BOTH bars
+  // before any live order. Changing these numbers requires a written
+  // pre-registration note in the commit message (same convention as the
+  // marketRegimeFilter decision) — never a quiet edit because the record
+  // is "almost there". Gate state is read-only reporting: it must NEVER
+  // feed scan/sizing logic, or the bot could trade toward the quota.
+  goLive: {
+    minClosedTrades: 20,
+    minProfitFactor: 1.2,
+    frozenAt: '2026-08-06',
+  },
+
+  // Robinhood options approval levels: Level 2 = long calls/puts only.
+  // Level 3 adds spreads. User reports Level 3 approval (2026-08) — spreads
+  // enabled so the paper record tests the full strategy, including selling
+  // rich premium via defined-risk credit spreads (the variance-risk-premium
+  // wing the research supports). Verify the AGENTIC account carries Level 3
+  // before any live spread order.
+  approvals: {
+    canTradeSpreads: true,
+  },
+
+  ops: {
+    runsPerWeekday: 2,          // scheduled cloud runs per weekday (morning autopilot + afternoon manage)
+  },
+
+  data: {
+    riskFreeRate: 0.04,         // used for Black-Scholes greeks fallback
+    historyDays: 150,
+    slippage: 0.25,             // paper fills assume you give up 25% of the half-spread
+    feePerContract: 0.04,       // regulatory/exchange fees per contract per side
+                                // (Robinhood is commission-free but passes these through)
+    // DATA-INTEGRITY parameters (not strategy thresholds): CBOE regenerates
+    // chain snapshots lazily, so a "fresh" fetch can carry hours-old quotes.
+    // A paper close on such a snapshot is fiction in the permanent record.
+    maxQuoteAgeMin: 45,         // older than this = quote-stale: fills deferred, tickets refused
+    maxStaleDeferrals: 2,       // a stale-quote exit is deferred at most this many runs, then fills anyway
+  },
+};

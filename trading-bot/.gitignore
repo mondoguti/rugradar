@@ -1,0 +1,11 @@
+# quote cache only — the paper portfolio and tickets ARE tracked in git so the
+# record survives ephemeral cloud containers (cloud autopilot commits state
+# after each run; the repo is the account's memory)
+data/cache/
+
+# generated synthetic test data — recreate with: node trading-bot/fixtures/generate.js
+fixtures/*.json
+
+# fixture-mode state world (--fixtures redirects ALL reads/writes here so
+# tests can never touch the real record) — never committed
+data-fixtures/
