@@ -1,11 +1,13 @@
 # Trading Bot — Owner Digest
 
-_Auto-generated 2026-09-15T14:51:54.830Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
+_Auto-generated 2026-09-15T19:45:54.399Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
 
 ## Your account
 
-Your paper account is worth **$1754.10** (started at $2000.00, down 12.3%).
-- **GM**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $98.88, now marked at $174.00 (up $75.12).
+Your paper account is worth **$1682.77** (started at $2000.00, down 15.86%).
+⚠ The drawdown safety brake is ON (16% below the account's best level): trade size is cut in half until the account recovers.
+- **GM**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $98.88, now marked at $107.50 (up $8.62).
+- **PFE**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $87.25, now marked at $82.50 (down $4.75).
 
 ## Recent trades (last 10)
 
@@ -23,16 +25,16 @@ At the current pace (~0.85 trades/week) the remaining 15 trades take roughly 17.
 
 ## What trading costs you
 
-Total modeled trading friction so far (slippage + fees, closed and open trades): **$37.40** — on closed trades, friction consumed 11.4% of the price moves the bot caught.
+Total modeled trading friction so far (slippage + fees, closed and open trades): **$38.73** — on closed trades, friction consumed 11.4% of the price moves the bot caught.
 Friction is the silent killer of small accounts. The model is fair on tight quotes and slightly generous on wide ones; real fills will calibrate it.
 
 ## System health
 
-Last scheduled run: 2026-09-15T14:51:54.826Z (autopilot).
+Last scheduled run: 2026-09-15T19:45:54.380Z (manage).
 Research dataset: 721 daily volatility snapshots collected so far (grows every scan; becomes tradeable evidence at ~120 days).
 
 ## Needs your attention
 
-- Ticket **PFE** is HELD until someone verifies the earnings date: if earnings land before 2026-10-16, discard it; otherwise set it back to "pending".
-- Positions holding through scheduled market-moving events: 1 through the FOMC decision on 2026-09-16 — expect sharp moves around those releases.
-- **GM**'s latest price snapshot was 50.4 minutes old when marked (an exit has been deferred 1x waiting for fresh quotes) — treat its mark as approximate.
+- Your 2 positions all profit only if stocks rise; net exposure is 2.28x your equity — a 3% market move against you would cost about $114.99 in one day.
+- Positions holding through scheduled market-moving events: 1 through the CPI release on 2026-10-14, 2 through the FOMC decision on 2026-09-16 — expect sharp moves around those releases.
+- **GM**'s latest price snapshot was 70.8 minutes old when marked (an exit has been deferred 2x waiting for fresh quotes) — treat its mark as approximate.
