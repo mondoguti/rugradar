@@ -1,7 +1,7 @@
 {
   "createdAt": "2026-08-05T03:07:09.300Z",
   "startingEquity": 2000,
-  "cash": 1580.1,
+  "cash": 1492.77,
   "positions": [
     {
       "id": "aedfecc7",
@@ -101,6 +101,70 @@
       "stopDistanceOverBand": 3.89,
       "zeroBidLegs": [],
       "staleDeferrals": 1
+    },
+    {
+      "id": "a8709c18",
+      "mode": "paper",
+      "symbol": "PFE",
+      "structure": "call_debit_spread",
+      "direction": "bullish",
+      "score": 96,
+      "ivRegime": "normal",
+      "legs": [
+        {
+          "action": "buy",
+          "type": "call",
+          "expiry": "2026-10-16",
+          "strike": 27,
+          "contracts": 1,
+          "mid": 1.115,
+          "bid": 1.09,
+          "ask": 1.14,
+          "delta": 0.6546,
+          "iv": 0.23,
+          "gamma": 0.1977,
+          "theta": -0.0109,
+          "vega": 0.0298,
+          "openInterest": 12489
+        },
+        {
+          "action": "sell",
+          "type": "call",
+          "expiry": "2026-10-16",
+          "strike": 29,
+          "contracts": 1,
+          "mid": 0.255,
+          "bid": 0.23,
+          "ask": 0.28,
+          "delta": 0.2525,
+          "iv": 0.2229,
+          "gamma": 0.1738,
+          "theta": -0.0093,
+          "vega": 0.026,
+          "openInterest": 24269
+        }
+      ],
+      "openedAt": "2026-09-15T14:52:32.064Z",
+      "entryValue": 87.25,
+      "entryCredit": null,
+      "maxLoss": 86,
+      "maxGain": 114,
+      "dteAtOpen": 31,
+      "thesis": "uptrend, EMA separation 1.49 ATR, slope confirmed; RSI 53; good entry: 0.1 ATR from EMA20",
+      "spot": 27.72,
+      "macro": {
+        "nextFomc": "2026-09-16",
+        "nextCpi": "2026-10-14",
+        "fomcBeforeExpiry": true
+      },
+      "chainAsOf": "2026-09-15T14:50:23Z",
+      "chainSpot": 27.565,
+      "earningsDate": "2026-10-29",
+      "entrySlippageCost": 1.25,
+      "entryFees": 0.08,
+      "costModelVersion": 2,
+      "currentValue": 87.25,
+      "unrealizedPnl": 0
     }
   ],
   "closed": [

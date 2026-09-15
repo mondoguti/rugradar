@@ -8,7 +8,7 @@
     "score": 96,
     "ivRegime": "normal",
     "structure": "call_debit_spread",
-    "status": "needs_earnings_verification",
+    "status": "executed_paper",
     "thesis": "uptrend, EMA separation 1.49 ATR, slope confirmed; RSI 53; good entry: 0.1 ATR from EMA20",
     "chainAsOf": "2026-09-15T14:50:23Z",
     "chainSpot": 27.565,
@@ -60,11 +60,12 @@
         "earnings date unknown — VERIFY manually before executing (no long premium through earnings)"
       ]
     },
-    "earningsDate": null,
+    "earningsDate": "2026-10-29",
     "macro": {
       "nextFomc": "2026-09-16",
       "nextCpi": "2026-10-14",
       "fomcBeforeExpiry": true
-    }
+    },
+    "earningsVerified": "Pfizer Q3 report unannounced; estimated 2026-10-29 to 2026-11-05 (Q3 2025 was Nov 4, Q3 2024 Oct 29) — after expiry 2026-10-16"
   }
 ]
