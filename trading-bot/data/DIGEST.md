@@ -1,15 +1,15 @@
 # Trading Bot — Owner Digest
 
-_Auto-generated 2026-09-09T19:45:57.429Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
+_Auto-generated 2026-09-15T14:51:54.830Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
 
 ## Your account
 
-Your paper account is worth **$1799.22** (started at $2000.00, down 10.04%).
-- **BAC**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $152.25, now marked at $133.50 (down $18.75).
-- **GM**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $98.88, now marked at $97.00 (down $1.88).
+Your paper account is worth **$1754.10** (started at $2000.00, down 12.3%).
+- **GM**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $98.88, now marked at $174.00 (up $75.12).
 
 ## Recent trades (last 10)
 
+- **BAC** (2026-09-15): a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Why entered: uptrend, EMA separation 2.38 ATR, slope confirmed; RSI 56; good entry: 0.2 ATR from EMA20. Why exited: stop loss hit: -91%. Result after costs: **-$141.11**.
 - **NOK** (2026-09-08): a put spread — profits if the stock falls, with capped cost and capped gain. Why entered: downtrend, EMA separation 1.12 ATR, slope confirmed; RSI 44. Why exited: stop loss hit: -51%. Result after costs: **-$52.57**.
 - **KO** (2026-09-01): a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Why entered: uptrend, EMA separation 1.77 ATR, slope confirmed; RSI 61. Why exited: stop loss hit: -53%. Result after costs: **-$45.53**.
 - **LAC** (2026-08-26): bought put options — profits if the stock falls. Why entered: downtrend, EMA separation 1.95 ATR, slope confirmed; RSI 41. Why exited: thesis broken: underlying 3.25 closed above EMA20 + 0.5 ATR (3.23). Result after costs: **-$86.73**.
@@ -17,21 +17,22 @@ Your paper account is worth **$1799.22** (started at $2000.00, down 10.04%).
 
 ## Progress to real money
 
-4 of 20 required trades logged; profit factor 0.03 (needs > 1.2).
+5 of 20 required trades logged; profit factor 0.02 (needs > 1.2).
 The bot will NOT place real-money orders until this gate is green. It never trades faster just to fill the quota.
-At the current pace (~0.82 trades/week) the remaining 16 trades take roughly 19.5 more week(s).
+At the current pace (~0.85 trades/week) the remaining 15 trades take roughly 17.6 more week(s).
 
 ## What trading costs you
 
-Total modeled trading friction so far (slippage + fees, closed and open trades): **$35.28** — on closed trades, friction consumed 11.9% of the price moves the bot caught.
+Total modeled trading friction so far (slippage + fees, closed and open trades): **$37.40** — on closed trades, friction consumed 11.4% of the price moves the bot caught.
 Friction is the silent killer of small accounts. The model is fair on tight quotes and slightly generous on wide ones; real fills will calibrate it.
 
 ## System health
 
-Last scheduled run: 2026-09-09T19:45:57.408Z (manage).
-Research dataset: 704 daily volatility snapshots collected so far (grows every scan; becomes tradeable evidence at ~120 days).
+Last scheduled run: 2026-09-15T14:51:54.826Z (autopilot).
+Research dataset: 721 daily volatility snapshots collected so far (grows every scan; becomes tradeable evidence at ~120 days).
 
 ## Needs your attention
 
-- Your 2 positions all profit only if stocks rise; net exposure is 2.40x your equity — a 3% market move against you would cost about $129.51 in one day.
-- Positions holding through scheduled market-moving events: 2 through the CPI release on 2026-09-11, 2 through the FOMC decision on 2026-09-16 — expect sharp moves around those releases.
+- Ticket **PFE** is HELD until someone verifies the earnings date: if earnings land before 2026-10-16, discard it; otherwise set it back to "pending".
+- Positions holding through scheduled market-moving events: 1 through the FOMC decision on 2026-09-16 — expect sharp moves around those releases.
+- **GM**'s latest price snapshot was 50.4 minutes old when marked (an exit has been deferred 1x waiting for fresh quotes) — treat its mark as approximate.
