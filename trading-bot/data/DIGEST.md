@@ -1,12 +1,12 @@
 # Trading Bot — Owner Digest
 
-_Auto-generated 2026-09-16T14:52:02.641Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
+_Auto-generated 2026-09-16T19:45:45.804Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
 
 ## Your account
 
-Your paper account is worth **$1641.32** (started at $2000.00, down 17.93%).
+Your paper account is worth **$1642.82** (started at $2000.00, down 17.86%).
 ⚠ The drawdown safety brake is ON (18% below the account's best level): trade size is cut in half until the account recovers.
-- **PFE**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $87.25, now marked at $81.50 (down $5.75).
+- **PFE**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $87.25, now marked at $83.00 (down $4.25).
 
 ## Recent trades (last 10)
 
@@ -30,9 +30,10 @@ Friction is the silent killer of small accounts. The model is fair on tight quot
 
 ## System health
 
-Last scheduled run: 2026-09-16T14:52:02.637Z (autopilot).
+Last scheduled run: 2026-09-16T19:45:45.653Z (manage).
 Research dataset: 776 daily volatility snapshots collected so far (grows every scan; becomes tradeable evidence at ~120 days).
 
 ## Needs your attention
 
 - Positions holding through scheduled market-moving events: 1 through the CPI release on 2026-10-14, 1 through the FOMC decision on 2026-09-16 — expect sharp moves around those releases.
+- **PFE**'s latest price snapshot was 283.5 minutes old when marked — treat its mark as approximate.
