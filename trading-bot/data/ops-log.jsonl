@@ -74,3 +74,6 @@
 {"ts":"2026-09-16T14:52:02.641Z","cmd":"autopilot","ok":true,"durationMs":47241,"equity":1641.32,"openPositions":1}
 {"ts":"2026-09-16T19:45:45.805Z","cmd":"manage","ok":true,"durationMs":632,"equity":1642.82,"openPositions":1}
 {"ts":"2026-09-16T19:45:46.117Z","cmd":"exposure","phase":"status","netDeltaDollars":1109.17,"netDeltaPctOfEquity":0.675,"netThetaPerDay":-0.2,"netVega":0.51,"positions":1,"bullish":1,"bearish":0,"nextFomc":"2026-09-16","nextCpi":"2026-10-14","spanningNextFomc":1,"spanningNextCpi":1,"quoteStalePositions":["PFE"],"maxQuoteAgeMin":283.5}
+{"ts":"2026-09-17T14:50:47.408Z","cmd":"exposure","phase":"pre-fill","netDeltaDollars":1164.67,"netDeltaPctOfEquity":0.705,"netThetaPerDay":-0.13,"netVega":0.33,"positions":1,"bullish":1,"bearish":0,"nextFomc":"2026-10-28","nextCpi":"2026-10-14","spanningNextFomc":0,"spanningNextCpi":1,"quoteStalePositions":[],"maxQuoteAgeMin":29.1}
+{"ts":"2026-09-17T14:51:32.568Z","cmd":"exposure","phase":"status","netDeltaDollars":1164.67,"netDeltaPctOfEquity":0.705,"netThetaPerDay":-0.13,"netVega":0.33,"positions":1,"bullish":1,"bearish":0,"nextFomc":"2026-10-28","nextCpi":"2026-10-14","spanningNextFomc":0,"spanningNextCpi":1,"quoteStalePositions":[],"maxQuoteAgeMin":29.1}
+{"ts":"2026-09-17T14:51:32.573Z","cmd":"autopilot","ok":true,"durationMs":45835,"equity":1651.32,"openPositions":1}
