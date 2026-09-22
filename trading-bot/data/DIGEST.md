@@ -1,12 +1,12 @@
 # Trading Bot — Owner Digest
 
-_Auto-generated 2026-09-22T14:51:46.112Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
+_Auto-generated 2026-09-22T19:46:01.233Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
 
 ## Your account
 
-Your paper account is worth **$1653.82** (started at $2000.00, down 17.31%).
-⚠ The drawdown safety brake is ON (18% below the account's best level): trade size is cut in half until the account recovers.
-- **PFE**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $87.25, now marked at $94.00 (up $6.75).
+Your paper account is worth **$1657.82** (started at $2000.00, down 17.11%).
+⚠ The drawdown safety brake is ON (17% below the account's best level): trade size is cut in half until the account recovers.
+- **PFE**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $87.25, now marked at $98.00 (up $10.75).
 
 ## Recent trades (last 10)
 
@@ -30,7 +30,7 @@ Friction is the silent killer of small accounts. The model is fair on tight quot
 
 ## System health
 
-Last scheduled run: 2026-09-22T14:51:46.108Z (autopilot).
+Last scheduled run: 2026-09-22T19:46:01.213Z (manage).
 Research dataset: 918 daily volatility snapshots collected so far (grows every scan; becomes tradeable evidence at ~120 days).
 
 ## Needs your attention
