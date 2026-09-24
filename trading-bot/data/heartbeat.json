@@ -1,10 +1,10 @@
 {
-  "lastRunAt": "2026-09-23T19:45:35.935Z",
+  "lastRunAt": "2026-09-24T14:52:28.700Z",
   "equity": 1659.32,
   "openPositions": 1,
-  "cmd": "manage",
-  "lastScanAt": "2026-09-23T14:52:00.020Z",
-  "lastManageAt": "2026-09-23T19:45:35.935Z",
+  "cmd": "autopilot",
+  "lastScanAt": "2026-09-24T14:52:28.700Z",
+  "lastManageAt": "2026-09-24T14:52:28.700Z",
   "bookGreeks": {
     "netDeltaDollars": 1344.5,
     "netDeltaPctOfEquity": 0.81,
@@ -20,6 +20,6 @@
     "quoteStalePositions": [
       "PFE"
     ],
-    "maxQuoteAgeMin": 1069.6
+    "maxQuoteAgeMin": 2215.3
   }
 }

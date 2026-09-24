@@ -89,7 +89,7 @@
       "currentValue": 99.5,
       "unrealizedPnl": 12.25,
       "markQuoteAt": "2026-09-23T01:56:02Z",
-      "markQuoteAgeMin": 1069.6,
+      "markQuoteAgeMin": 2215.3,
       "quoteStale": true,
       "staleDeferrals": 0,
       "exitValue": 98.37,
@@ -101,8 +101,8 @@
       "markStale": false,
       "zeroBidLegs": [],
       "spotAtMark": 27.9,
-      "dte": 23,
-      "markedAt": "2026-09-23T19:45:35.933Z"
+      "dte": 22,
+      "markedAt": "2026-09-24T14:51:21.423Z"
     }
   ],
   "closed": [
