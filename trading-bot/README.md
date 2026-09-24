@@ -210,3 +210,6 @@ not suitable for everyone. Past performance (paper or live) does not guarantee
 future results. You are responsible for every order placed through your
 brokerage account. Data comes from free delayed feeds (CBOE delayed quotes,
 Stooq/Yahoo daily bars) — verify quotes at the broker before executing.
+The CBOE API lives on `cdn-api.cboe.com` since 2026-09-24 (the old `cdn.cboe.com`
+host redirects there); a scheduled environment's network allowlist must include
+the new host or every feed silently goes stale, as happened 2026-09-22 to 09-24.

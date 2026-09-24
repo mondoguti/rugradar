@@ -70,12 +70,25 @@ async function fetchJson(url) {
   return res.json();
 }
 
+// CBOE moved its delayed-quote API from cdn.cboe.com to cdn-api.cboe.com on
+// 2026-09-24 (the old host froze at the 09-22 close for two sessions, then
+// began answering 307 to the new host). The new host is primary; the old one
+// stays as a fallback for any path CBOE has not moved yet.
+const CBOE_HOSTS = ['https://cdn-api.cboe.com', 'https://cdn.cboe.com'];
+async function fetchCboeJson(path) {
+  let lastErr;
+  for (const host of CBOE_HOSTS) {
+    try { return await fetchJson(`${host}${path}`); } catch (e) { lastErr = e; }
+  }
+  throw lastErr;
+}
+
 // ---------- daily history ----------
 
 // CBOE's chart CDN: daily OHLCV back to ~2004, datacenter-friendly, and the
 // same host as our options chains. Primary source.
 async function historyFromCboe(symbol) {
-  const j = await fetchJson(`https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/${symbol}.json`);
+  const j = await fetchCboeJson(`/api/global/delayed_quotes/charts/historical/${symbol}.json`);
   const rows = j?.data;
   if (!rows?.length) throw new Error(`cboe history: empty for ${symbol}`);
   return rows.map((r) => ({
@@ -166,7 +179,7 @@ function dteFrom(expiry) {
 }
 
 async function chainFromCboe(symbol) {
-  const j = await fetchJson(`https://cdn.cboe.com/api/global/delayed_quotes/options/${symbol}.json`);
+  const j = await fetchCboeJson(`/api/global/delayed_quotes/options/${symbol}.json`);
   const d = j?.data;
   if (!d?.options?.length) throw new Error(`cboe: empty chain for ${symbol}`);
   const spot = d.current_price ?? d.close;
