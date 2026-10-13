@@ -28,9 +28,21 @@ export const MACRO_2026 = {
     // robinhood.com/us/en/prediction-markets/economics/events/cpi-in-{september-oct-14,october-nov-10,november-dec-10}-2026
     // and polymarkettrader.com/events/us-cpi-2026 — both also matching the
     // already-verified Aug 12 / Sep 11 entries. Re-verify against BLS when reachable.
+    // 2026-10-13 extension (all of 2027): gov sites still unreachable. FOMC
+    // 2027 decision days agree across MNI (published 2025-09-05),
+    // narwhalapi.com (checked against the Fed page as updated 2026-09-16),
+    // sync2cal, fedpolicy.org; the Fed marks each date tentative until the
+    // prior meeting confirms it. CPI 2027 dates are the ones attributed to
+    // the BLS schedule page by chartwatch.tv and smartcalendars.ai; sites
+    // publishing their own PROJECTIONS differ on one date (Sep-2027 data:
+    // Oct 13 vs the BLS-attributed Oct 14). Advisory tags only — never a
+    // trading rule — so a one-day slip twelve months out is tolerable;
+    // re-verify both series against the primary sources when reachable.
   ],
-  fomc: ['2026-01-28', '2026-03-18', '2026-04-29', '2026-06-17', '2026-07-29', '2026-09-16', '2026-10-28', '2026-12-09'],
-  cpi: ['2026-01-13', '2026-02-13', '2026-03-11', '2026-04-10', '2026-05-12', '2026-06-10', '2026-07-14', '2026-08-12', '2026-09-11', '2026-10-14', '2026-11-10', '2026-12-10'],
+  fomc: ['2026-01-28', '2026-03-18', '2026-04-29', '2026-06-17', '2026-07-29', '2026-09-16', '2026-10-28', '2026-12-09',
+         '2027-01-27', '2027-03-17', '2027-04-28', '2027-06-09', '2027-07-28', '2027-09-15', '2027-10-27', '2027-12-08'],
+  cpi: ['2026-01-13', '2026-02-13', '2026-03-11', '2026-04-10', '2026-05-12', '2026-06-10', '2026-07-14', '2026-08-12', '2026-09-11', '2026-10-14', '2026-11-10', '2026-12-10',
+        '2027-01-13', '2027-02-11', '2027-03-10', '2027-04-13', '2027-05-12', '2027-06-10', '2027-07-14', '2027-08-11', '2027-09-14', '2027-10-14', '2027-11-10', '2027-12-10'],
 };
 
 // US market holidays (NYSE full closures), for trading-day arithmetic.
