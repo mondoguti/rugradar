@@ -126,13 +126,15 @@ async function historyFromYahoo(symbol, days) {
   return out;
 }
 
-export async function getDailyHistory(symbol, days = config.data.historyDays) {
+// opts.fresh bypasses the 15-minute cache: expiry settlement must see the
+// expiry session's COMPLETE bar, never one cached from mid-session.
+export async function getDailyHistory(symbol, days = config.data.historyDays, { fresh = false } = {}) {
   if (useFixtures()) {
     const f = path.join(FIXTURES_DIR, `${symbol}.history.json`);
     if (!fs.existsSync(f)) throw new Error(`no fixture history for ${symbol} — run: node trading-bot/fixtures/generate.js`);
     return JSON.parse(fs.readFileSync(f, 'utf8')).slice(-days);
   }
-  const cached = cacheGet(`hist-${symbol}-${days}`);
+  const cached = fresh ? null : cacheGet(`hist-${symbol}-${days}`);
   if (cached) return cached;
   let bars, source;
   try {

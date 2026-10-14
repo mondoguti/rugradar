@@ -175,6 +175,20 @@ re-tuning on backtests manufactures fake edges. New ideas follow one road:
   UNadjusted close-to-close returns over exactly 5/10/21 trading days from the
   CBOE history feed, written only when the series is contiguous (no feed
   holes) and never from the Yahoo fallback.
+- Expiry settlement model (effective 2026-10-14): a paper position that
+  reaches expiry with no option quotes is settled at INTRINSIC VALUE from the
+  underlying's close on the expiry date (the OCC's own exercise rule), using
+  the daily-history feed; the record stores `settleMethod: "intrinsic"`, the
+  close, the source and per-leg intrinsic values. Only when even that close
+  is unknowable does the earlier data-free total-loss settlement apply
+  (`settleMethod: "total-loss"`). Context: CBOE moved its API host on
+  2026-09-24 and this environment's network allowlist did not follow, so the
+  PFE call spread opened 2026-09-15 could not be marked from 2026-09-23 on,
+  skipped its planned 7-DTE exit, and reached expiry blind. Settling it at
+  zero when its underlying's close was a matter of public record would have
+  been a feed failure booked as a trade. Note the opposite bias too: the
+  position was held through an exit the rules would have taken earlier, at a
+  price nobody knows.
 - PDT semantics change (effective 2026-08-07): the day-trade window now
   counts actual NYSE trading days (FINRA's rule) instead of 7.0 calendar
   days. More conservative around holidays; business-day-granular otherwise —

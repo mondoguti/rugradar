@@ -303,6 +303,18 @@ async function cmdPaperBuy() {
   if (asJson) out({ executed }, '');
 }
 
+// Expiry settlement line for the run log: intrinsic (the honest number) vs
+// the data-free total loss, which gets its warning so a feed failure is
+// never mistaken for a trade.
+function logSettlement(pos, blind, why) {
+  if (blind.settleMethod === 'intrinsic') {
+    console.log(`  SETTLED ${pos.symbol} at expiry (${why}): intrinsic value from the underlying's expiry-day close = ${fmtMoney(blind.proceeds)} — realized ${fmtMoney(blind.realizedPnl)}`);
+  } else {
+    console.log(`  SETTLED ${pos.symbol} blind (${why}, expiry-day close unavailable) — realized ${fmtMoney(blind.realizedPnl)} (conservative total loss)`);
+    if ((pos.currentValue ?? 0) > 0) console.log(`  ⚠ NOTE: the last good mark valued ${pos.symbol} at ${fmtMoney(pos.currentValue)} — a data-free settlement booked it at zero. If the real position had value, that is a feed failure, not a trade.`);
+  }
+}
+
 async function cmdManage() {
   if (!isTradingDay(etDay())) {
     console.log(`market holiday (${etDay()}) — no manage run: marks would reuse the prior session's quotes`);
@@ -326,10 +338,9 @@ async function cmdManage() {
       pos.markStale = true; // a failed fetch IS a stale mark — freezes the high-water ratchet and labels status honestly
       pos.markFailures = (pos.markFailures || 0) + 1;
       console.log(`  ! could not mark ${pos.symbol} (failure #${pos.markFailures}): ${e.message}`);
-      const blind = settleExpiredBlind(pos, portfolio);
+      const blind = await settleExpiredBlind(pos, portfolio);
       if (blind.settled) {
-        console.log(`  SETTLED ${pos.symbol} blind: all legs expired with no market data — realized ${fmtMoney(blind.realizedPnl)} (conservative total loss)`);
-        if ((pos.currentValue ?? 0) > 0) console.log(`  ⚠ NOTE: the last good mark valued ${pos.symbol} at ${fmtMoney(pos.currentValue)} — a data-free settlement booked it at zero. If the real position had value, that is a feed failure, not a trade.`);
+        logSettlement(pos, blind, 'no market data');
       } else if (blind.liveExpired) {
         console.log(`  ⚠ LIVE position ${pos.symbol} is past expiry with no market data — reconcile the real broker settlement via /bot-manage and record the actual fill`);
       } else if (pos.markFailures >= 3) {
@@ -343,10 +354,9 @@ async function cmdManage() {
     // resolve — quotes for an expired contract never come back — so settle
     // blind exactly as the fetch-failure path does.
     if (pos.markStale) {
-      const blind = settleExpiredBlind(pos, portfolio);
+      const blind = await settleExpiredBlind(pos, portfolio);
       if (blind.settled) {
-        console.log(`  SETTLED ${pos.symbol} blind: all legs expired but quotes are gone — realized ${fmtMoney(blind.realizedPnl)} (conservative total loss)`);
-        if ((pos.currentValue ?? 0) > 0) console.log(`  ⚠ NOTE: the last good mark valued ${pos.symbol} at ${fmtMoney(pos.currentValue)} — a data-free settlement booked it at zero. If the real position had value, that is a feed failure, not a trade.`);
+        logSettlement(pos, blind, 'quotes gone from the chain');
         continue; // removed from portfolio.positions — nothing left to decide
       }
       if (blind.liveExpired) {

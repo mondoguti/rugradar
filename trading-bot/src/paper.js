@@ -3,7 +3,7 @@
 // works before a single real dollar moves.
 
 import config from '../config.js';
-import { getOptionsChain, getDailyHistory, chainAgeMin } from './marketdata.js';
+import { getOptionsChain, getDailyHistory, getDailyHistoryMeta, chainAgeMin } from './marketdata.js';
 import { isRegularSession } from './calendar.js';
 import { ema, atr } from './indicators.js';
 import { savePortfolio, etDay, appendExecLog } from './portfolio.js';
@@ -481,7 +481,34 @@ export function recordLiveClose(pos, netDollars, portfolio, reason) {
 // to zero, credit spreads to max loss — so the record can never be flattered
 // by missing data. Deliberately does NOT route through closePositionPaper,
 // whose fallback pricing would flatter the fill.
-export function settleExpiredBlind(pos, portfolio) {
+// Expiry settlement from the underlying's close ON each leg's expiry date:
+// what the OCC does to every in-the-money contract (auto-exercise) and what
+// a broker books for the rest (expire worthless). Needs no option quotes —
+// only the daily bar for the expiry session, and that bar must be COMPLETE:
+// the history snapshot has to postdate the 21:00Z expiry cutoff, so a
+// mid-session bar cached at 15:00Z can never price a settlement. Returns
+// null when any leg's expiry-day close is unknown; the caller then falls
+// back to the conservative total-loss settlement.
+export async function intrinsicSettlement(pos) {
+  const cutoff = Math.max(...pos.legs.map((l) => new Date(`${l.expiry}T21:00:00Z`).getTime()));
+  const stamp = (m) => (m?.fetchedAt ? Date.parse(m.fetchedAt) : 0);
+  const bars = await getDailyHistory(pos.symbol, undefined, { fresh: stamp(getDailyHistoryMeta(pos.symbol)) < cutoff });
+  const meta = getDailyHistoryMeta(pos.symbol);
+  if (meta?.source !== 'fixtures' && stamp(meta) < cutoff) return null; // still a pre-close snapshot
+  const closeOn = (date) => { const b = bars.find((x) => x.date === date); return b && b.close > 0 ? b.close : null; };
+  let value = 0;
+  const legs = [];
+  for (const leg of pos.legs) {
+    const S = closeOn(leg.expiry);
+    if (S == null) return null;
+    const intrinsic = leg.type === 'call' ? Math.max(0, S - leg.strike) : Math.max(0, leg.strike - S);
+    value += (leg.action === 'buy' ? 1 : -1) * intrinsic * leg.contracts * 100;
+    legs.push({ action: leg.action, type: leg.type, strike: leg.strike, expiry: leg.expiry, contracts: leg.contracts, settleClose: S, intrinsic: +intrinsic.toFixed(4) });
+  }
+  return { value: +value.toFixed(2), legs, source: meta?.source ?? null, fetchedAt: meta?.fetchedAt ?? null };
+}
+
+export async function settleExpiredBlind(pos, portfolio) {
   const allExpired = pos.legs.every((l) => new Date(`${l.expiry}T21:00:00Z`) < new Date());
   if (!allExpired) return { settled: false };
   // A LIVE position must never be settled locally — the broker may have
@@ -493,27 +520,57 @@ export function settleExpiredBlind(pos, portfolio) {
     pos.reconcileFlaggedAt = pos.reconcileFlaggedAt ?? new Date().toISOString();
     return { settled: false, liveExpired: true };
   }
-  portfolio.positions = portfolio.positions.filter((p) => p.id !== pos.id);
+  // Prefer the honest number: intrinsic value from the expiry-day close.
+  // Only when even that is unknowable does the record take a total loss.
+  let settle = null;
+  try { settle = await intrinsicSettlement(pos); } catch { settle = null; }
+  const isCredit = pos.entryCredit != null;
   // Expired contracts incur no closing fee — reality, not flattery. Entry
-  // fees were real money and stay in the loss.
-  const realizedPnl = +(-(pos.entryValue + (pos.entryFees || 0))).toFixed(2);
+  // fees were real money and stay in the P&L.
+  const entryFees = pos.entryFees || 0;
+  let proceeds, realizedPnl, closeReason, settleMethod;
+  if (settle) {
+    settleMethod = 'intrinsic';
+    if (isCredit) {
+      const costToClose = +(-settle.value).toFixed(2); // intrinsic of the short structure
+      proceeds = +(pos.entryValue + pos.entryCredit - costToClose).toFixed(2);
+      realizedPnl = +(pos.entryCredit - costToClose - entryFees).toFixed(2);
+    } else {
+      proceeds = settle.value;
+      realizedPnl = +(proceeds - pos.entryValue - entryFees).toFixed(2);
+    }
+    const closes = [...new Set(settle.legs.map((l) => `${l.expiry} close ${l.settleClose}`))].join(', ');
+    closeReason = `expired — settled at intrinsic value from the underlying's close on expiry (${closes}; ${settle.source} bars)`;
+  } else {
+    settleMethod = 'total-loss';
+    proceeds = 0;
+    realizedPnl = +(-(pos.entryValue + entryFees)).toFixed(2);
+    closeReason = 'expired without market data — settled conservatively at total loss';
+  }
+  portfolio.cash = +(portfolio.cash + proceeds).toFixed(2);
+  portfolio.positions = portfolio.positions.filter((p) => p.id !== pos.id);
   portfolio.closed.push({
     ...pos,
     closedAt: new Date().toISOString(),
-    closeReason: 'expired without market data — settled conservatively at total loss',
+    closeReason,
     realizedPnl,
     exitSlippageCost: null,
     exitFees: 0,
+    settleMethod,
+    settleValue: settle ? settle.value : 0,
+    settleCloseSource: settle?.source ?? null,
+    settleLegs: settle?.legs ?? null,
   });
   savePortfolio(portfolio);
   appendExecLog({
     ts: new Date().toISOString(), id: pos.id, symbol: pos.symbol,
     structure: pos.structure, mode: pos.mode, event: 'expire',
-    legs: pos.legs.map((leg) => ({
+    legs: pos.legs.map((leg, i) => ({
       action: leg.action, type: leg.type, strike: leg.strike, expiry: leg.expiry,
-      bid: null, ask: null, mid: null, fillPx: 0, spreadPctOfMid: null,
+      bid: null, ask: null, mid: null, fillPx: settle ? settle.legs[i].intrinsic : 0, spreadPctOfMid: null,
     })),
-    midValue: null, fillValue: 0, slippage: null, fees: 0,
+    midValue: settle ? settle.value : null, fillValue: proceeds, slippage: null, fees: 0,
+    settleMethod, settleCloseSource: settle?.source ?? null,
   });
-  return { settled: true, realizedPnl };
+  return { settled: true, realizedPnl, proceeds, settleMethod };
 }
