@@ -4,7 +4,7 @@
 
 import config from '../config.js';
 import { getOptionsChain, getDailyHistory, getDailyHistoryMeta, chainAgeMin } from './marketdata.js';
-import { isRegularSession } from './calendar.js';
+import { isRegularSession, isTradingDay } from './calendar.js';
 import { ema, atr } from './indicators.js';
 import { savePortfolio, etDay, appendExecLog } from './portfolio.js';
 import { canDayTrade } from './risk.js';
@@ -228,7 +228,23 @@ export async function markPosition(pos) {
   }
   pos.dte = Math.min(...pos.legs.map((l) => Math.max(0, Math.round((new Date(`${l.expiry}T21:00:00Z`) - Date.now()) / 86400000))));
   pos.markedAt = new Date().toISOString();
+  await refreshPriceAnchor(pos);
   return pos;
+}
+
+// The underlying's last COMPLETED daily close as first seen on the position,
+// set ONCE and never refreshed: expiry settlement compares it against the
+// same date in the settlement-time series to tell whether the series was
+// re-based (a split, or a feed change) since the strikes were listed — a
+// re-based close against un-adjusted strikes would price a fiction. Refreshing
+// it every run would compare a fetch with itself and never detect anything.
+async function refreshPriceAnchor(pos) {
+  if (pos.priceAnchor?.date) return;
+  try {
+    const bars = await getDailyHistory(pos.symbol);
+    const last = bars.filter((b) => b.date < etDay() && b.close > 0).at(-1);
+    if (last) pos.priceAnchor = { date: last.date, close: +last.close.toFixed(4), source: getDailyHistoryMeta(pos.symbol)?.source ?? null };
+  } catch { /* anchor is best effort; settlement copes without one */ }
 }
 
 // Returns {action: 'hold'|'close', reason} per exit rules.
@@ -489,28 +505,61 @@ export function recordLiveClose(pos, netDollars, portfolio, reason) {
 // mid-session bar cached at 15:00Z can never price a settlement. Returns
 // null when any leg's expiry-day close is unknown; the caller then falls
 // back to the conservative total-loss settlement.
+// Throws when the close cannot be used THIS run; the error carries
+// `unknowable: true` only when no later run could ever know it either.
 export async function intrinsicSettlement(pos) {
-  const cutoff = Math.max(...pos.legs.map((l) => new Date(`${l.expiry}T21:00:00Z`).getTime()));
+  const expiries = pos.legs.map((l) => l.expiry).sort();
+  const latestExpiry = expiries.at(-1);
+  // 21:00Z is the EST closing bell itself (17:00 ET only under EDT); delayed
+  // feeds and the closing print need time to land. Trust a snapshot only when
+  // it already holds a LATER session's bar, or was fetched at least an hour
+  // past the bell.
+  const complete = new Date(`${latestExpiry}T22:00:00Z`).getTime();
   const stamp = (m) => (m?.fetchedAt ? Date.parse(m.fetchedAt) : 0);
-  const bars = await getDailyHistory(pos.symbol, undefined, { fresh: stamp(getDailyHistoryMeta(pos.symbol)) < cutoff });
+  const fail = (msg, unknowable = false) => { const e = new Error(msg); e.unknowable = unknowable; throw e; };
+  const bars = await getDailyHistory(pos.symbol, undefined, { fresh: stamp(getDailyHistoryMeta(pos.symbol)) < complete });
   const meta = getDailyHistoryMeta(pos.symbol);
-  if (meta?.source !== 'fixtures' && stamp(meta) < cutoff) return null; // still a pre-close snapshot
-  const closeOn = (date) => { const b = bars.find((x) => x.date === date); return b && b.close > 0 ? b.close : null; };
+  const source = meta?.source ?? 'history';
+  if (!bars.length) fail(`${source} history is empty for ${pos.symbol}`);
+  const hasLater = bars.some((b) => b.date > latestExpiry);
+  if (source !== 'fixtures' && stamp(meta) < complete && !hasLater) {
+    fail(`${source} snapshot (${meta?.fetchedAt ?? 'unknown time'}) may predate the final ${latestExpiry} close — need a later session's bar or an hour past the bell`);
+  }
+  if (bars[0].date > expiries[0]) fail(`${source} history starts ${bars[0].date}, after the ${expiries[0]} expiry — the close is outside the window`, true);
+  // A re-based series (split, or a feed switch) would be priced against
+  // strikes that were not re-based. Any real split moves the anchor ≥ 20%;
+  // 2% leaves room for cent-level differences between sources.
+  if (pos.priceAnchor?.date) {
+    const ref = bars.find((b) => b.date === pos.priceAnchor.date)?.close;
+    if (ref == null || Math.abs(ref / pos.priceAnchor.close - 1) > 0.02) {
+      fail(`${source} series re-based since ${pos.priceAnchor.date} (anchor ${pos.priceAnchor.close}, now ${ref ?? 'missing'}) — split or feed change; strikes may not match`);
+    }
+  }
+  // The expiry-day close: the exact bar on a trading day (a hole on a trading
+  // day is a feed gap, never silently the prior day); contracts whose listed
+  // expiry falls on a market holiday expire with the prior session's close.
+  const closeOn = (date) => {
+    const b = isTradingDay(date) ? bars.find((x) => x.date === date) : bars.filter((x) => x.date <= date).at(-1);
+    return b && b.close > 0 ? b.close : null;
+  };
   let value = 0;
   const legs = [];
   for (const leg of pos.legs) {
-    const S = closeOn(leg.expiry);
-    if (S == null) return null;
+    const raw = closeOn(leg.expiry);
+    if (raw == null) fail(`no ${leg.expiry} bar in ${source} history (last bar ${bars.at(-1)?.date ?? 'none'})`);
+    // Yahoo serves float32 closes (29.204999923706055 for a 29.205 print);
+    // 4dp keeps every real digit and strips the artifact before arithmetic.
+    const S = +raw.toFixed(4);
     const intrinsic = leg.type === 'call' ? Math.max(0, S - leg.strike) : Math.max(0, leg.strike - S);
     value += (leg.action === 'buy' ? 1 : -1) * intrinsic * leg.contracts * 100;
     legs.push({ action: leg.action, type: leg.type, strike: leg.strike, expiry: leg.expiry, contracts: leg.contracts, settleClose: S, intrinsic: +intrinsic.toFixed(4) });
   }
-  return { value: +value.toFixed(2), legs, source: meta?.source ?? null, fetchedAt: meta?.fetchedAt ?? null };
+  return { value: +value.toFixed(2), legs, source, fetchedAt: meta?.fetchedAt ?? null };
 }
 
 export async function settleExpiredBlind(pos, portfolio) {
   const allExpired = pos.legs.every((l) => new Date(`${l.expiry}T21:00:00Z`) < new Date());
-  if (!allExpired) return { settled: false };
+  if (!allExpired) { await refreshPriceAnchor(pos); return { settled: false }; }
   // A LIVE position must never be settled locally — the broker may have
   // auto-exercised it for real proceeds. Flag it for reconciliation and keep
   // it in state so the warning repeats every run until the real fill is
@@ -521,31 +570,48 @@ export async function settleExpiredBlind(pos, portfolio) {
     return { settled: false, liveExpired: true };
   }
   // Prefer the honest number: intrinsic value from the expiry-day close.
-  // Only when even that is unknowable does the record take a total loss.
-  let settle = null;
-  try { settle = await intrinsicSettlement(pos); } catch { settle = null; }
+  // "Unavailable this run" (feed down, rate-limited, bar not yet published,
+  // snapshot not yet final) is NOT "unknowable": the close is public record
+  // and usually arrives next run. Defer, bounded, before the irreversible
+  // total-loss record is written — the same bargain stale-quote exits strike.
+  let settle = null, unavailable = null, unknowable = false;
+  try { settle = await intrinsicSettlement(pos); } catch (e) { unavailable = e.message; unknowable = !!e.unknowable; }
+  if (!settle) {
+    pos.settleDeferReason = unavailable;
+    if (!unknowable && (pos.settleDeferrals || 0) < config.data.maxSettleDeferrals) {
+      pos.settleDeferrals = (pos.settleDeferrals || 0) + 1;
+      savePortfolio(portfolio); // the counter must survive the run, or the cap never binds
+      return { settled: false, deferred: true, attempt: pos.settleDeferrals, max: config.data.maxSettleDeferrals, reason: unavailable };
+    }
+  }
   const isCredit = pos.entryCredit != null;
   // Expired contracts incur no closing fee — reality, not flattery. Entry
   // fees were real money and stay in the P&L.
   const entryFees = pos.entryFees || 0;
-  let proceeds, realizedPnl, closeReason, settleMethod;
+  // Exit-row mark in closePositionPaper's convention: cost to close for
+  // credit structures, liquidation value for debit; null when settled blind
+  // (no mark exists — the total-loss figure is a floor, not data).
+  let proceeds, realizedPnl, closeReason, settleMethod, settleMark = null;
   if (settle) {
     settleMethod = 'intrinsic';
     if (isCredit) {
       const costToClose = +(-settle.value).toFixed(2); // intrinsic of the short structure
+      settleMark = costToClose;
       proceeds = +(pos.entryValue + pos.entryCredit - costToClose).toFixed(2);
       realizedPnl = +(pos.entryCredit - costToClose - entryFees).toFixed(2);
     } else {
+      settleMark = settle.value;
       proceeds = settle.value;
       realizedPnl = +(proceeds - pos.entryValue - entryFees).toFixed(2);
     }
     const closes = [...new Set(settle.legs.map((l) => `${l.expiry} close ${l.settleClose}`))].join(', ');
-    closeReason = `expired — settled at intrinsic value from the underlying's close on expiry (${closes}; ${settle.source} bars)`;
+    // Category before the first colon: report --detail groups exits by it.
+    closeReason = `expired at intrinsic: settled from the underlying's close on expiry (${closes}; ${settle.source} bars)`;
   } else {
     settleMethod = 'total-loss';
     proceeds = 0;
     realizedPnl = +(-(pos.entryValue + entryFees)).toFixed(2);
-    closeReason = 'expired without market data — settled conservatively at total loss';
+    closeReason = `expired without data: settled conservatively at total loss (${unavailable ?? 'expiry-day close unavailable'}${pos.settleDeferrals ? `; deferred ${pos.settleDeferrals} run(s) first` : ''})`;
   }
   portfolio.cash = +(portfolio.cash + proceeds).toFixed(2);
   portfolio.positions = portfolio.positions.filter((p) => p.id !== pos.id);
@@ -557,7 +623,7 @@ export async function settleExpiredBlind(pos, portfolio) {
     exitSlippageCost: null,
     exitFees: 0,
     settleMethod,
-    settleValue: settle ? settle.value : 0,
+    settleValue: settleMark,
     settleCloseSource: settle?.source ?? null,
     settleLegs: settle?.legs ?? null,
   });
@@ -569,8 +635,8 @@ export async function settleExpiredBlind(pos, portfolio) {
       action: leg.action, type: leg.type, strike: leg.strike, expiry: leg.expiry,
       bid: null, ask: null, mid: null, fillPx: settle ? settle.legs[i].intrinsic : 0, spreadPctOfMid: null,
     })),
-    midValue: settle ? settle.value : null, fillValue: proceeds, slippage: null, fees: 0,
-    settleMethod, settleCloseSource: settle?.source ?? null,
+    midValue: settleMark, fillValue: proceeds, slippage: null, fees: 0,
+    settleMethod, settleCloseSource: settle?.source ?? null, settleDeferrals: pos.settleDeferrals ?? 0,
   });
-  return { settled: true, realizedPnl, proceeds, settleMethod };
+  return { settled: true, realizedPnl, proceeds, settleMethod, settleValue: settleMark, settleDeferrals: pos.settleDeferrals ?? 0 };
 }

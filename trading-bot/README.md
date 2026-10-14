@@ -179,9 +179,15 @@ re-tuning on backtests manufactures fake edges. New ideas follow one road:
   reaches expiry with no option quotes is settled at INTRINSIC VALUE from the
   underlying's close on the expiry date (the OCC's own exercise rule), using
   the daily-history feed; the record stores `settleMethod: "intrinsic"`, the
-  close, the source and per-leg intrinsic values. Only when even that close
-  is unknowable does the earlier data-free total-loss settlement apply
-  (`settleMethod: "total-loss"`). Context: CBOE moved its API host on
+  close, the source and per-leg intrinsic values. A close that is merely
+  unavailable on a given run (feed down, rate-limited, bar not yet final —
+  the snapshot must postdate the bell by an hour or already hold a later
+  session's bar) defers the settlement, at most `data.maxSettleDeferrals`
+  runs, and a series re-based since the last anchor (a split) is refused
+  rather than priced against un-adjusted strikes. Only when the close is
+  genuinely unknowable, or the deferrals run out, does the earlier data-free
+  total-loss settlement apply (`settleMethod: "total-loss"`, with the reason
+  and the deferral count recorded). Context: CBOE moved its API host on
   2026-09-24 and this environment's network allowlist did not follow, so the
   PFE call spread opened 2026-09-15 could not be marked from 2026-09-23 on,
   skipped its planned 7-DTE exit, and reached expiry blind. Settling it at

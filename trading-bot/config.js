@@ -224,6 +224,12 @@ export default {
     // chain snapshots lazily, so a "fresh" fetch can carry hours-old quotes.
     // A paper close on such a snapshot is fiction in the permanent record.
     maxQuoteAgeMin: 45,         // older than this = quote-stale: fills deferred, tickets refused
-    maxStaleDeferrals: 2,       // a stale-quote exit is deferred at most this many runs, then fills anyway
+    maxStaleDeferrals: 2,        // a stale-quote exit is deferred at most this many runs, then fills anyway
+    // Expiry settlement needs ONE expiry-day close from the daily-history
+    // feed. A fetch failure, a rate limit, or a bar the feed has not published
+    // yet is "unavailable this run", not "unknowable": defer, at most this
+    // many runs (two trading days at 2 runs/day), before the data-free
+    // total-loss settlement applies — and the record then says why.
+    maxSettleDeferrals: 4,
   },
 };

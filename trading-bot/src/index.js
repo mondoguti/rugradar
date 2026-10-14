@@ -307,10 +307,17 @@ async function cmdPaperBuy() {
 // the data-free total loss, which gets its warning so a feed failure is
 // never mistaken for a trade.
 function logSettlement(pos, blind, why) {
-  if (blind.settleMethod === 'intrinsic') {
-    console.log(`  SETTLED ${pos.symbol} at expiry (${why}): intrinsic value from the underlying's expiry-day close = ${fmtMoney(blind.proceeds)} — realized ${fmtMoney(blind.realizedPnl)}`);
+  if (blind.deferred) {
+    console.log(`  ⏳ ${pos.symbol} expired (${why}); settlement deferred ${blind.attempt}/${blind.max} — ${blind.reason}`);
+  } else if (blind.settleMethod === 'intrinsic') {
+    // Credit structures: settleValue is the cost to close the short structure
+    // at intrinsic; proceeds = collateral + credit kept − that cost. Debit
+    // structures: settleValue IS the proceeds.
+    const v = pos.entryCredit != null ? `cost to close ${fmtMoney(blind.settleValue)}` : `intrinsic value ${fmtMoney(blind.settleValue)}`;
+    const deferred = blind.settleDeferrals ? ` after ${blind.settleDeferrals} deferred run(s)` : '';
+    console.log(`  SETTLED ${pos.symbol} at expiry (${why}): ${v} from the underlying's expiry-day close${deferred}; proceeds ${fmtMoney(blind.proceeds)} — realized ${fmtMoney(blind.realizedPnl)}`);
   } else {
-    console.log(`  SETTLED ${pos.symbol} blind (${why}, expiry-day close unavailable) — realized ${fmtMoney(blind.realizedPnl)} (conservative total loss)`);
+    console.log(`  SETTLED ${pos.symbol} blind (${why}; ${pos.settleDeferReason ?? 'expiry-day close unavailable'}) — realized ${fmtMoney(blind.realizedPnl)} (conservative total loss)`);
     if ((pos.currentValue ?? 0) > 0) console.log(`  ⚠ NOTE: the last good mark valued ${pos.symbol} at ${fmtMoney(pos.currentValue)} — a data-free settlement booked it at zero. If the real position had value, that is a feed failure, not a trade.`);
   }
 }
@@ -339,7 +346,7 @@ async function cmdManage() {
       pos.markFailures = (pos.markFailures || 0) + 1;
       console.log(`  ! could not mark ${pos.symbol} (failure #${pos.markFailures}): ${e.message}`);
       const blind = await settleExpiredBlind(pos, portfolio);
-      if (blind.settled) {
+      if (blind.settled || blind.deferred) {
         logSettlement(pos, blind, 'no market data');
       } else if (blind.liveExpired) {
         console.log(`  ⚠ LIVE position ${pos.symbol} is past expiry with no market data — reconcile the real broker settlement via /bot-manage and record the actual fill`);
@@ -355,9 +362,9 @@ async function cmdManage() {
     // blind exactly as the fetch-failure path does.
     if (pos.markStale) {
       const blind = await settleExpiredBlind(pos, portfolio);
-      if (blind.settled) {
+      if (blind.settled || blind.deferred) {
         logSettlement(pos, blind, 'quotes gone from the chain');
-        continue; // removed from portfolio.positions — nothing left to decide
+        continue; // settled (removed) or waiting for the expiry-day close — nothing left to decide
       }
       if (blind.liveExpired) {
         console.log(`  ⚠ LIVE position ${pos.symbol} is past expiry with no quotes — reconcile the real broker settlement via /bot-manage and record the actual fill`);
@@ -430,7 +437,8 @@ async function cmdStatus() {
   }
   const x = bookExposure(portfolio);
   for (const p of portfolio.positions) {
-    const staleTag = p.markStale ? `  [STALE MARK${p.zeroBidLegs?.length ? `: zero-bid ${p.zeroBidLegs.join(', ')}` : ''}]` : p.quoteStale ? `  [QUOTES ${p.markQuoteAgeMin}min OLD${p.staleDeferrals ? `, exit deferred ${p.staleDeferrals}x` : ''}]` : '';
+    const settleTag = p.settleDeferrals ? `  [EXPIRED: settlement deferred ${p.settleDeferrals}x — ${p.settleDeferReason ?? ''}]` : '';
+    const staleTag = settleTag + (p.markStale ? `  [STALE MARK${p.zeroBidLegs?.length ? `: zero-bid ${p.zeroBidLegs.join(', ')}` : ''}]` : p.quoteStale ? `  [QUOTES ${p.markQuoteAgeMin}min OLD${p.staleDeferrals ? `, exit deferred ${p.staleDeferrals}x` : ''}]` : '');
     console.log(`  [${p.id}] ${p.symbol} ${p.structure}  in ${fmtMoney(p.entryValue)}  now ${fmtMoney(p.currentValue)}  uP&L ${fmtMoney(p.unrealizedPnl)}  opened ${p.openedAt.slice(0, 10)}${staleTag}`);
   }
   if (portfolio.positions.length) {
