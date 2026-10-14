@@ -45,8 +45,17 @@ export function writeDigest({ portfolio, tickets = [], heartbeat = null }) {
   if (gov.rung > 0) {
     account.push(`⚠ The drawdown safety brake is ON (${(gov.dd * 100).toFixed(0)}% below the account's best level): ${gov.riskFactor === 0 ? 'no new trades until a human reviews' : 'trade size is cut in half until the account recovers'}.`);
   }
+  // An expired paper position whose settlement is deferred (settleExpiredBlind
+  // could not get the expiry-day close yet): the contract no longer trades, so
+  // "now marked at" would be fiction. Say what is actually true.
+  const settleWaiting = (pos) => (pos.settleDeferrals ?? 0) > 0;
+  const lastExpiry = (pos) => pos.legs.map((l) => l.expiry).sort().at(-1);
   for (const pos of portfolio.positions) {
     const plain = STRUCTURE_PLAIN[pos.structure] ?? pos.structure;
+    if (settleWaiting(pos)) {
+      account.push(`- **${pos.symbol}**: ${plain}. EXPIRED ${lastExpiry(pos)}; final value not known yet (settlement deferred ${pos.settleDeferrals} of ${config.data.maxSettleDeferrals} runs: ${pos.settleDeferReason ?? 'expiry-day close unavailable'}). Put in ${fmtMoney(pos.entryValue)}; until it settles the account still carries it at its last pre-expiry mark of ${fmtMoney(pos.currentValue)}, which may be far from the real outcome.`);
+      continue;
+    }
     account.push(`- **${pos.symbol}**: ${plain}. Put in ${fmtMoney(pos.entryValue)}, now marked at ${fmtMoney(pos.currentValue)} (${pos.unrealizedPnl >= 0 ? 'up' : 'down'} ${fmtMoney(Math.abs(pos.unrealizedPnl ?? 0))})${pos.markStale ? ' — prices are stale, treat the mark as approximate' : ''}.`);
   }
   if (!portfolio.positions.length) account.push('No positions are open — the bot only trades when its rules are satisfied. Sitting out IS a strategy.');
@@ -88,6 +97,7 @@ export function writeDigest({ portfolio, tickets = [], heartbeat = null }) {
   }
   for (const pos of portfolio.positions) {
     if (pos.needsReconcile) attention.push(`- LIVE position **${pos.symbol}** expired with no local data — record the real settlement: \`record-close ${pos.id} --net=<dollars> --confirm\`.`);
+    if (settleWaiting(pos)) attention.push(`- **${pos.symbol}** expired on ${lastExpiry(pos)} but could not be settled yet (${pos.settleDeferrals} of ${config.data.maxSettleDeferrals} deferrals used: ${pos.settleDeferReason ?? 'expiry-day close unavailable'}). If the deferrals run out it will be booked as a total loss with that reason on the record.`);
   }
   if (gov.riskFactor === 0) attention.push('- The drawdown circuit breaker HALTED new trades — a human needs to review the account before it resumes.');
   // Book-level direction and event risk — the things no single trade shows.

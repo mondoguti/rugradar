@@ -508,8 +508,17 @@ export function recordLiveClose(pos, netDollars, portfolio, reason) {
 // Throws when the close cannot be used THIS run; the error carries
 // `unknowable: true` only when no later run could ever know it either.
 export async function intrinsicSettlement(pos) {
-  const expiries = pos.legs.map((l) => l.expiry).sort();
-  const latestExpiry = expiries.at(-1);
+  // A listed expiry on a market holiday (or a legacy weekend date) settles
+  // on the PRIOR trading day's close; that exact session's bar is required —
+  // a hole there is a feed gap, never silently an older close.
+  const sessionOf = (date) => {
+    const d = new Date(`${date}T12:00:00Z`);
+    for (let i = 0; i < 10 && !isTradingDay(d.toISOString().slice(0, 10)); i++) d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+  };
+  const sessions = pos.legs.map((l) => sessionOf(l.expiry));
+  const latestExpiry = pos.legs.map((l) => l.expiry).sort().at(-1);
+  const earliestSession = [...sessions].sort()[0];
   // 21:00Z is the EST closing bell itself (17:00 ET only under EDT); delayed
   // feeds and the closing print need time to land. Trust a snapshot only when
   // it already holds a LATER session's bar, or was fetched at least an hour
@@ -517,7 +526,8 @@ export async function intrinsicSettlement(pos) {
   const complete = new Date(`${latestExpiry}T22:00:00Z`).getTime();
   const stamp = (m) => (m?.fetchedAt ? Date.parse(m.fetchedAt) : 0);
   const fail = (msg, unknowable = false) => { const e = new Error(msg); e.unknowable = unknowable; throw e; };
-  const bars = await getDailyHistory(pos.symbol, undefined, { fresh: stamp(getDailyHistoryMeta(pos.symbol)) < complete });
+  const days = config.data.historyDays; // explicit: the cache key and the full-window test both depend on it
+  const bars = await getDailyHistory(pos.symbol, days, { fresh: stamp(getDailyHistoryMeta(pos.symbol)) < complete });
   const meta = getDailyHistoryMeta(pos.symbol);
   const source = meta?.source ?? 'history';
   if (!bars.length) fail(`${source} history is empty for ${pos.symbol}`);
@@ -525,36 +535,46 @@ export async function intrinsicSettlement(pos) {
   if (source !== 'fixtures' && stamp(meta) < complete && !hasLater) {
     fail(`${source} snapshot (${meta?.fetchedAt ?? 'unknown time'}) may predate the final ${latestExpiry} close — need a later session's bar or an hour past the bell`);
   }
-  if (bars[0].date > expiries[0]) fail(`${source} history starts ${bars[0].date}, after the ${expiries[0]} expiry — the close is outside the window`, true);
-  // A re-based series (split, or a feed switch) would be priced against
-  // strikes that were not re-based. Any real split moves the anchor ≥ 20%;
-  // 2% leaves room for cent-level differences between sources.
-  if (pos.priceAnchor?.date) {
-    const ref = bars.find((b) => b.date === pos.priceAnchor.date)?.close;
-    if (ref == null || Math.abs(ref / pos.priceAnchor.close - 1) > 0.02) {
-      fail(`${source} series re-based since ${pos.priceAnchor.date} (anchor ${pos.priceAnchor.close}, now ${ref ?? 'missing'}) — split or feed change; strikes may not match`);
-    }
+  if (bars[0].date > earliestSession) {
+    // Unknowable only when the feed delivered the FULL requested window and
+    // the session still precedes it. A shorter series is a truncated response
+    // THIS run, not knowledge about the next one: defer like any other
+    // unavailable close.
+    const full = bars.length >= days;
+    fail(`${source} history starts ${bars[0].date} (${bars.length}/${days} bars), after the ${earliestSession} settlement session — ${full ? 'the close is outside the window' : 'short series, window not delivered'}`, full);
   }
-  // The expiry-day close: the exact bar on a trading day (a hole on a trading
-  // day is a feed gap, never silently the prior day); contracts whose listed
-  // expiry falls on a market holiday expire with the prior session's close.
-  const closeOn = (date) => {
-    const b = isTradingDay(date) ? bars.find((x) => x.date === date) : bars.filter((x) => x.date <= date).at(-1);
-    return b && b.close > 0 ? b.close : null;
-  };
+  // A re-based series (split, or a feed switch) would be priced against
+  // strikes that were not re-based. A hole on the anchor's own date is
+  // "cannot verify", not "re-based" (Yahoo drops null-close bars and later
+  // restores them; the source can differ per fetch): compare the nearest
+  // earlier bar instead with a split-sized tolerance (a real split moves the
+  // anchor >= 20%; a neighbour differs by one session's move), and with no
+  // neighbour at all settle anyway and say so on the record.
+  let anchorCheck = 'no anchor';
+  if (pos.priceAnchor?.date) {
+    const exact = bars.find((b) => b.date === pos.priceAnchor.date && b.close > 0);
+    const near = exact ?? bars.filter((b) => b.date < pos.priceAnchor.date && b.close > 0).at(-1);
+    const tol = exact ? 0.02 : 0.20;
+    if (near && Math.abs(near.close / pos.priceAnchor.close - 1) > tol) {
+      fail(`${source} series re-based since ${pos.priceAnchor.date} (anchor ${pos.priceAnchor.close}, ${near.date} now ${near.close}) — split or feed change; strikes may not match`);
+    }
+    anchorCheck = exact ? `exact ${exact.date}` : near ? `nearest ${near.date} (anchor date absent from the series)` : 'unverified (no bar at or before the anchor date)';
+  }
+  const closeOn = (session) => { const b = bars.find((x) => x.date === session); return b && b.close > 0 ? b.close : null; };
   let value = 0;
   const legs = [];
-  for (const leg of pos.legs) {
-    const raw = closeOn(leg.expiry);
-    if (raw == null) fail(`no ${leg.expiry} bar in ${source} history (last bar ${bars.at(-1)?.date ?? 'none'})`);
+  pos.legs.forEach((leg, i) => {
+    const session = sessions[i];
+    const raw = closeOn(session);
+    if (raw == null) fail(`no ${session} bar in ${source} history${session !== leg.expiry ? ` (the ${leg.expiry} expiry settles on that prior session)` : ''} (last bar ${bars.at(-1)?.date ?? 'none'})`);
     // Yahoo serves float32 closes (29.204999923706055 for a 29.205 print);
     // 4dp keeps every real digit and strips the artifact before arithmetic.
     const S = +raw.toFixed(4);
     const intrinsic = leg.type === 'call' ? Math.max(0, S - leg.strike) : Math.max(0, leg.strike - S);
     value += (leg.action === 'buy' ? 1 : -1) * intrinsic * leg.contracts * 100;
-    legs.push({ action: leg.action, type: leg.type, strike: leg.strike, expiry: leg.expiry, contracts: leg.contracts, settleClose: S, intrinsic: +intrinsic.toFixed(4) });
-  }
-  return { value: +value.toFixed(2), legs, source, fetchedAt: meta?.fetchedAt ?? null };
+    legs.push({ action: leg.action, type: leg.type, strike: leg.strike, expiry: leg.expiry, settleSession: session, contracts: leg.contracts, settleClose: S, intrinsic: +intrinsic.toFixed(4) });
+  });
+  return { value: +value.toFixed(2), legs, source, fetchedAt: meta?.fetchedAt ?? null, anchorCheck };
 }
 
 export async function settleExpiredBlind(pos, portfolio) {
@@ -604,7 +624,7 @@ export async function settleExpiredBlind(pos, portfolio) {
       proceeds = settle.value;
       realizedPnl = +(proceeds - pos.entryValue - entryFees).toFixed(2);
     }
-    const closes = [...new Set(settle.legs.map((l) => `${l.expiry} close ${l.settleClose}`))].join(', ');
+    const closes = [...new Set(settle.legs.map((l) => `${l.settleSession} close ${l.settleClose}`))].join(', ');
     // Category before the first colon: report --detail groups exits by it.
     closeReason = `expired at intrinsic: settled from the underlying's close on expiry (${closes}; ${settle.source} bars)`;
   } else {
@@ -625,6 +645,7 @@ export async function settleExpiredBlind(pos, portfolio) {
     settleMethod,
     settleValue: settleMark,
     settleCloseSource: settle?.source ?? null,
+    settleAnchorCheck: settle?.anchorCheck ?? null,
     settleLegs: settle?.legs ?? null,
   });
   savePortfolio(portfolio);
@@ -636,7 +657,7 @@ export async function settleExpiredBlind(pos, portfolio) {
       bid: null, ask: null, mid: null, fillPx: settle ? settle.legs[i].intrinsic : 0, spreadPctOfMid: null,
     })),
     midValue: settleMark, fillValue: proceeds, slippage: null, fees: 0,
-    settleMethod, settleCloseSource: settle?.source ?? null, settleDeferrals: pos.settleDeferrals ?? 0,
+    settleMethod, settleCloseSource: settle?.source ?? null, settleAnchorCheck: settle?.anchorCheck ?? null, settleDeferrals: pos.settleDeferrals ?? 0,
   });
   return { settled: true, realizedPnl, proceeds, settleMethod, settleValue: settleMark, settleDeferrals: pos.settleDeferrals ?? 0 };
 }
