@@ -183,11 +183,11 @@ re-tuning on backtests manufactures fake edges. New ideas follow one road:
   unavailable on a given run (feed down, rate-limited, bar not yet final —
   the snapshot must postdate the bell by an hour or already hold a later
   session's bar) defers the settlement, at most `data.maxSettleDeferrals`
-  runs; a series re-based since the position's price anchor (a split) is
-  refused rather than priced against un-adjusted strikes, while an anchor
-  that cannot be verified is recorded as such and never blocks the
-  settlement; a holiday-dated expiry settles on the prior session's exact
-  bar. Only when the close is
+  runs; a series re-based since the position's price anchor (three recent
+  closes, compared exact-date at 2% — a split) is refused rather than priced
+  against un-adjusted strikes, while an anchor that cannot be verified is
+  recorded as such and never blocks the settlement; a holiday-dated expiry
+  settles on the prior session's exact bar. Only when the close is
   genuinely unknowable, or the deferrals run out, does the earlier data-free
   total-loss settlement apply (`settleMethod: "total-loss"`, with the reason
   and the deferral count recorded). Context: CBOE moved its API host on

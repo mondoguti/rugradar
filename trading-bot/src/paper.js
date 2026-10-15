@@ -242,8 +242,17 @@ async function refreshPriceAnchor(pos) {
   if (pos.priceAnchor?.date) return;
   try {
     const bars = await getDailyHistory(pos.symbol);
-    const last = bars.filter((b) => b.date < etDay() && b.close > 0).at(-1);
-    if (last) pos.priceAnchor = { date: last.date, close: +last.close.toFixed(4), source: getDailyHistoryMeta(pos.symbol)?.source ?? null };
+    const done = bars.filter((b) => b.date < etDay() && b.close > 0);
+    const last = done.at(-1);
+    // Several consecutive closes, not one: a hole on ONE of these dates in the
+    // settlement-time series still leaves an EXACT comparison, and a split
+    // re-bases every pre-split bar, so any surviving date tells the story.
+    if (last) {
+      pos.priceAnchor = {
+        date: last.date, close: +last.close.toFixed(4), source: getDailyHistoryMeta(pos.symbol)?.source ?? null,
+        points: done.slice(-3).map((b) => ({ date: b.date, close: +b.close.toFixed(4) })),
+      };
+    }
   } catch { /* anchor is best effort; settlement copes without one */ }
 }
 
@@ -544,21 +553,35 @@ export async function intrinsicSettlement(pos) {
     fail(`${source} history starts ${bars[0].date} (${bars.length}/${days} bars), after the ${earliestSession} settlement session — ${full ? 'the close is outside the window' : 'short series, window not delivered'}`, full);
   }
   // A re-based series (split, or a feed switch) would be priced against
-  // strikes that were not re-based. A hole on the anchor's own date is
-  // "cannot verify", not "re-based" (Yahoo drops null-close bars and later
-  // restores them; the source can differ per fetch): compare the nearest
-  // earlier bar instead with a split-sized tolerance (a real split moves the
-  // anchor >= 20%; a neighbour differs by one session's move), and with no
-  // neighbour at all settle anyway and say so on the record.
+  // strikes that were not re-based. The check is EXACT-date only: each
+  // anchored close is compared with the same date in today's series at 2%.
+  // A re-base scales every pre-split bar, so it shows on every anchored date
+  // that survives; one date off while another matches is a feed glitch.
+  // When no anchored date survives (holes), a neighbouring bar cannot tell a
+  // split from a one-session move — so it may annotate the record but never
+  // block it: a false "re-based" could never resolve and would end in an
+  // irreversible total-loss record.
   let anchorCheck = 'no anchor';
   if (pos.priceAnchor?.date) {
-    const exact = bars.find((b) => b.date === pos.priceAnchor.date && b.close > 0);
-    const near = exact ?? bars.filter((b) => b.date < pos.priceAnchor.date && b.close > 0).at(-1);
-    const tol = exact ? 0.02 : 0.20;
-    if (near && Math.abs(near.close / pos.priceAnchor.close - 1) > tol) {
-      fail(`${source} series re-based since ${pos.priceAnchor.date} (anchor ${pos.priceAnchor.close}, ${near.date} now ${near.close}) — split or feed change; strikes may not match`);
+    const raw = pos.priceAnchor.points?.length ? pos.priceAnchor.points : [{ date: pos.priceAnchor.date, close: pos.priceAnchor.close }];
+    const points = raw.filter((p) => p?.date && Number.isFinite(p.close) && p.close > 0);
+    const present = points.map((p) => ({ p, b: bars.find((b) => b.date === p.date && b.close > 0) })).filter((x) => x.b);
+    const dev = (x) => Math.abs(x.b.close / x.p.close - 1);
+    if (!points.length) {
+      anchorCheck = 'unverified (anchor unusable)';
+    } else if (present.length) {
+      const off = present.filter((x) => dev(x) > 0.02);
+      if (off.length === present.length) {
+        fail(`${source} series re-based since ${off[0].p.date} (${off.map((x) => `${x.p.date}: anchor ${x.p.close}, now ${x.b.close}`).join('; ')}) — split or feed change; strikes may not match`);
+      }
+      const ok = present.filter((x) => dev(x) <= 0.02).map((x) => x.p.date).join(',');
+      anchorCheck = off.length ? `exact ${ok} (${off.length} anchored date(s) differ — feed glitch, not a re-base)` : `exact ${ok}`;
+    } else {
+      const newest = points.at(-1);
+      const near = bars.filter((b) => b.date < newest.date && b.close > 0).at(-1);
+      const drift = near ? Math.abs(near.close / newest.close - 1) : null;
+      anchorCheck = `unverified (no anchored date present in the series${near ? `; nearest earlier ${near.date} differs ${(drift * 100).toFixed(1)}%${drift >= 0.10 ? ' — split-sized, check this record' : ''}` : ''})`;
     }
-    anchorCheck = exact ? `exact ${exact.date}` : near ? `nearest ${near.date} (anchor date absent from the series)` : 'unverified (no bar at or before the anchor date)';
   }
   const closeOn = (session) => { const b = bars.find((x) => x.date === session); return b && b.close > 0 ? b.close : null; };
   let value = 0;
