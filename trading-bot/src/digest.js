@@ -99,6 +99,14 @@ export function writeDigest({ portfolio, tickets = [], heartbeat = null }) {
     if (pos.needsReconcile) attention.push(`- LIVE position **${pos.symbol}** expired with no local data — record the real settlement: \`record-close ${pos.id} --net=<dollars> --confirm\`.`);
     if (settleWaiting(pos)) attention.push(`- **${pos.symbol}** expired on ${lastExpiry(pos)} but could not be settled yet (${pos.settleDeferrals} of ${config.data.maxSettleDeferrals} deferrals used: ${pos.settleDeferReason ?? 'expiry-day close unavailable'}). If the deferrals run out it will be booked as a total loss with that reason on the record.`);
   }
+  // Expiry settlements whose price-series check was anything but a clean
+  // exact-date match: the settlement proceeded and annotated the record
+  // instead of blocking, so the owner must see it. Bounded to the recent
+  // window the trades section shows, so it ages out rather than persisting.
+  const anchorUnclean = (t) => t.settleAnchorCheck && t.settleAnchorCheck !== 'no anchor' && !/^exact [^(]*$/.test(t.settleAnchorCheck);
+  for (const t of portfolio.closed.slice(-10).filter(anchorUnclean)) {
+    attention.push(`- **${t.symbol}**'s expiry settlement on ${(t.closedAt || '').slice(0, 10)} was booked at **${fmtMoney(t.realizedPnl)}**, but its price series could not be fully verified against a split or feed change (${t.settleAnchorCheck}). Check that result against an independent close before trusting it.`);
+  }
   if (gov.riskFactor === 0) attention.push('- The drawdown circuit breaker HALTED new trades — a human needs to review the account before it resumes.');
   // Book-level direction and event risk — the things no single trade shows.
   // Computed from the portfolio in hand, never read back from a heartbeat

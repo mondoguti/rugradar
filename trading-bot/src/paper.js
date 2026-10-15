@@ -648,8 +648,12 @@ export async function settleExpiredBlind(pos, portfolio) {
       realizedPnl = +(proceeds - pos.entryValue - entryFees).toFixed(2);
     }
     const closes = [...new Set(settle.legs.map((l) => `${l.settleSession} close ${l.settleClose}`))].join(', ');
-    // Category before the first colon: report --detail groups exits by it.
-    closeReason = `expired at intrinsic: settled from the underlying's close on expiry (${closes}; ${settle.source} bars)`;
+    // Category before the first colon: report --detail groups exits by it. A
+    // price-series check that is anything but a clean exact-date match is an
+    // annotation addressed to the owner, so it rides on the reason every
+    // consumer renders, not only on a JSON field.
+    const anchorClean = /^exact [^(]*$/.test(settle.anchorCheck) || settle.anchorCheck === 'no anchor';
+    closeReason = `expired at intrinsic: settled from the underlying's close on expiry (${closes}; ${settle.source} bars${anchorClean ? '' : `; price-series check: ${settle.anchorCheck}`})`;
   } else {
     settleMethod = 'total-loss';
     proceeds = 0;
@@ -682,5 +686,5 @@ export async function settleExpiredBlind(pos, portfolio) {
     midValue: settleMark, fillValue: proceeds, slippage: null, fees: 0,
     settleMethod, settleCloseSource: settle?.source ?? null, settleAnchorCheck: settle?.anchorCheck ?? null, settleDeferrals: pos.settleDeferrals ?? 0,
   });
-  return { settled: true, realizedPnl, proceeds, settleMethod, settleValue: settleMark, settleDeferrals: pos.settleDeferrals ?? 0 };
+  return { settled: true, realizedPnl, proceeds, settleMethod, settleValue: settleMark, settleDeferrals: pos.settleDeferrals ?? 0, anchorCheck: settle?.anchorCheck ?? null };
 }

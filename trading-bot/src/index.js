@@ -316,6 +316,7 @@ function logSettlement(pos, blind, why) {
     const v = pos.entryCredit != null ? `cost to close ${fmtMoney(blind.settleValue)}` : `intrinsic value ${fmtMoney(blind.settleValue)}`;
     const deferred = blind.settleDeferrals ? ` after ${blind.settleDeferrals} deferred run(s)` : '';
     console.log(`  SETTLED ${pos.symbol} at expiry (${why}): ${v} from the underlying's expiry-day close${deferred}; proceeds ${fmtMoney(blind.proceeds)} — realized ${fmtMoney(blind.realizedPnl)}`);
+    if (blind.anchorCheck && blind.anchorCheck !== 'no anchor' && !/^exact [^(]*$/.test(blind.anchorCheck)) console.log(`  ⚠ ${pos.symbol} price-series check: ${blind.anchorCheck}`);
   } else {
     console.log(`  SETTLED ${pos.symbol} blind (${why}; ${pos.settleDeferReason ?? 'expiry-day close unavailable'}) — realized ${fmtMoney(blind.realizedPnl)} (conservative total loss)`);
     if ((pos.currentValue ?? 0) > 0) console.log(`  ⚠ NOTE: the last good mark valued ${pos.symbol} at ${fmtMoney(pos.currentValue)} — a data-free settlement booked it at zero. If the real position had value, that is a feed failure, not a trade.`);
