@@ -1,6 +1,6 @@
 # Trading Bot — Owner Digest
 
-_Auto-generated 2026-10-14T19:45:47.571Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
+_Auto-generated 2026-10-15T14:55:33.363Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
 
 ## Your account
 
@@ -30,10 +30,9 @@ Friction is the silent killer of small accounts. The model is fair on tight quot
 
 ## System health
 
-Last scheduled run: 2026-10-14T19:45:47.557Z (manage).
+Last scheduled run: 2026-10-15T14:55:33.355Z (autopilot).
 Research dataset: 1004 daily volatility snapshots collected so far (grows every scan; becomes tradeable evidence at ~120 days).
 
 ## Needs your attention
 
-- Positions holding through scheduled market-moving events: 1 through the CPI release on 2026-10-14 — expect sharp moves around those releases.
 - **PFE**'s latest price snapshot was 2215.3 minutes old when marked — treat its mark as approximate.

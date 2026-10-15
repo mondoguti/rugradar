@@ -94,7 +94,7 @@
       "staleDeferrals": 0,
       "exitValue": 98.37,
       "peakPnl": 12.25,
-      "markFailures": 25,
+      "markFailures": 26,
       "markBand": 4.5,
       "stopDistance": 55.88,
       "stopDistanceOverBand": 12.42,
@@ -102,7 +102,26 @@
       "zeroBidLegs": [],
       "spotAtMark": 27.9,
       "dte": 22,
-      "markedAt": "2026-09-24T14:51:21.423Z"
+      "markedAt": "2026-09-24T14:51:21.423Z",
+      "priceAnchor": {
+        "date": "2026-10-14",
+        "close": 29.21,
+        "source": "yahoo",
+        "points": [
+          {
+            "date": "2026-10-12",
+            "close": 28.4
+          },
+          {
+            "date": "2026-10-13",
+            "close": 28.37
+          },
+          {
+            "date": "2026-10-14",
+            "close": 29.21
+          }
+        ]
+      }
     }
   ],
   "closed": [
