@@ -1,25 +1,23 @@
 {
-  "lastRunAt": "2026-10-15T19:46:17.439Z",
-  "equity": 1659.32,
-  "openPositions": 1,
-  "cmd": "manage",
-  "lastScanAt": "2026-10-15T14:55:33.355Z",
-  "lastManageAt": "2026-10-15T19:46:17.439Z",
+  "lastRunAt": "2026-10-20T15:00:27.786Z",
+  "equity": 1759.82,
+  "openPositions": 0,
+  "cmd": "autopilot",
+  "lastScanAt": "2026-10-20T15:00:27.786Z",
+  "lastManageAt": "2026-10-20T15:00:27.786Z",
   "bookGreeks": {
-    "netDeltaDollars": 1344.5,
-    "netDeltaPctOfEquity": 0.81,
-    "netThetaPerDay": 0,
-    "netVega": -0.09,
-    "positions": 1,
-    "bullish": 1,
+    "netDeltaDollars": 0,
+    "netDeltaPctOfEquity": 0,
+    "netThetaPerDay": null,
+    "netVega": null,
+    "positions": 0,
+    "bullish": 0,
     "bearish": 0,
     "nextFomc": "2026-10-28",
     "nextCpi": "2026-11-10",
     "spanningNextFomc": 0,
     "spanningNextCpi": 0,
-    "quoteStalePositions": [
-      "PFE"
-    ],
-    "maxQuoteAgeMin": 2215.3
+    "quoteStalePositions": [],
+    "maxQuoteAgeMin": 0
   }
 }

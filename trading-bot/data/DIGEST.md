@@ -1,15 +1,16 @@
 # Trading Bot — Owner Digest
 
-_Auto-generated 2026-10-15T19:46:17.466Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
+_Auto-generated 2026-10-20T15:00:27.793Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
 
 ## Your account
 
-Your paper account is worth **$1659.32** (started at $2000.00, down 17.03%).
-⚠ The drawdown safety brake is ON (17% below the account's best level): trade size is cut in half until the account recovers.
-- **PFE**: a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Put in $87.25, now marked at $99.50 (up $12.25) — prices are stale, treat the mark as approximate.
+Your paper account is worth **$1759.82** (started at $2000.00, down 12.01%).
+⚠ The drawdown safety brake is ON (12% below the account's best level): trade size is cut in half until the account recovers.
+No positions are open — the bot only trades when its rules are satisfied. Sitting out IS a strategy.
 
 ## Recent trades (last 10)
 
+- **PFE** (2026-10-20): a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Why entered: uptrend, EMA separation 1.49 ATR, slope confirmed; RSI 53; good entry: 0.1 ATR from EMA20. Why exited: expired at intrinsic: settled from the underlying's close on expiry (2026-10-16 close 29.58; yahoo bars). Result after costs: **$112.67**.
 - **GM** (2026-09-16): a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Why entered: uptrend, EMA separation 1.03 ATR, slope confirmed; RSI 51; good entry: 0.2 ATR from EMA20. Why exited: time exit: 2 DTE <= 7. Result after costs: **-$31.91**.
 - **BAC** (2026-09-15): a call spread (bought one, sold one) — profits if the stock rises, with capped cost and capped gain. Why entered: uptrend, EMA separation 2.38 ATR, slope confirmed; RSI 56; good entry: 0.2 ATR from EMA20. Why exited: stop loss hit: -91%. Result after costs: **-$141.11**.
 - **NOK** (2026-09-08): a put spread — profits if the stock falls, with capped cost and capped gain. Why entered: downtrend, EMA separation 1.12 ATR, slope confirmed; RSI 44. Why exited: stop loss hit: -51%. Result after costs: **-$52.57**.
@@ -19,20 +20,20 @@ Your paper account is worth **$1659.32** (started at $2000.00, down 17.03%).
 
 ## Progress to real money
 
-6 of 20 required trades logged; profit factor 0.01 (needs > 1.2).
+7 of 20 required trades logged; profit factor 0.33 (needs > 1.2).
 The bot will NOT place real-money orders until this gate is green. It never trades faster just to fill the quota.
-At the current pace (~1 trades/week) the remaining 14 trades take roughly 14 more week(s).
+At the current pace (~0.64 trades/week) the remaining 13 trades take roughly 20.3 more week(s).
 
 ## What trading costs you
 
-Total modeled trading friction so far (slippage + fees, closed and open trades): **$47.18** — on closed trades, friction consumed 14% of the price moves the bot caught.
+Total modeled trading friction so far (slippage + fees, closed and open trades): **$47.18** — on closed trades, friction consumed 10.7% of the price moves the bot caught.
 Friction is the silent killer of small accounts. The model is fair on tight quotes and slightly generous on wide ones; real fills will calibrate it.
 
 ## System health
 
-Last scheduled run: 2026-10-15T19:46:17.439Z (manage).
+Last scheduled run: 2026-10-20T15:00:27.786Z (autopilot).
 Research dataset: 1004 daily volatility snapshots collected so far (grows every scan; becomes tradeable evidence at ~120 days).
 
 ## Needs your attention
 
-- **PFE**'s latest price snapshot was 2215.3 minutes old when marked — treat its mark as approximate.
+Nothing right now.
