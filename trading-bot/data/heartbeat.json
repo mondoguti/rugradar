@@ -1,10 +1,10 @@
 {
-  "lastRunAt": "2026-11-02T19:46:16.563Z",
+  "lastRunAt": "2026-11-10T14:52:04.637Z",
   "equity": 1759.82,
   "openPositions": 0,
   "cmd": "manage",
-  "lastScanAt": "2026-11-02T15:22:59.994Z",
-  "lastManageAt": "2026-11-02T19:46:16.563Z",
+  "lastScanAt": "2026-11-04T15:02:18.847Z",
+  "lastManageAt": "2026-11-10T14:52:04.637Z",
   "bookGreeks": {
     "netDeltaDollars": 0,
     "netDeltaPctOfEquity": 0,
