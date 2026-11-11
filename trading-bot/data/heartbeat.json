@@ -1,10 +1,10 @@
 {
-  "lastRunAt": "2026-11-10T19:45:54.819Z",
+  "lastRunAt": "2026-11-11T14:54:24.670Z",
   "equity": 1759.82,
   "openPositions": 0,
-  "cmd": "manage",
-  "lastScanAt": "2026-11-10T14:56:46.658Z",
-  "lastManageAt": "2026-11-10T19:45:54.819Z",
+  "cmd": "autopilot",
+  "lastScanAt": "2026-11-11T14:54:24.670Z",
+  "lastManageAt": "2026-11-11T14:54:24.670Z",
   "bookGreeks": {
     "netDeltaDollars": 0,
     "netDeltaPctOfEquity": 0,
@@ -14,7 +14,7 @@
     "bullish": 0,
     "bearish": 0,
     "nextFomc": "2026-12-09",
-    "nextCpi": "2026-11-10",
+    "nextCpi": "2026-12-10",
     "spanningNextFomc": 0,
     "spanningNextCpi": 0,
     "quoteStalePositions": [],
