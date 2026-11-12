@@ -1,6 +1,6 @@
 # Trading Bot — Owner Digest
 
-_Auto-generated 2026-11-11T14:54:24.677Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
+_Auto-generated 2026-11-12T14:57:12.150Z. Every figure comes from the same code that runs the account; nothing here is hand-adjusted._
 
 ## Your account
 
@@ -31,7 +31,7 @@ Friction is the silent killer of small accounts. The model is fair on tight quot
 
 ## System health
 
-Last scheduled run: 2026-11-11T14:54:24.670Z (autopilot).
+Last scheduled run: 2026-11-12T14:57:12.142Z (autopilot).
 Research dataset: 1004 daily volatility snapshots collected so far (grows every scan; becomes tradeable evidence at ~120 days).
 
 ## Needs your attention
