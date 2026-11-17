@@ -208,3 +208,4 @@
 {"ts":"2026-11-16T19:46:40.793Z","cmd":"manage","ok":true,"durationMs":36,"equity":1759.82,"openPositions":0}
 {"ts":"2026-11-17T14:51:46.845Z","cmd":"exposure","phase":"pre-fill","netDeltaDollars":0,"netDeltaPctOfEquity":0,"netThetaPerDay":null,"netVega":null,"positions":0,"bullish":0,"bearish":0,"nextFomc":"2026-12-09","nextCpi":"2026-12-10","spanningNextFomc":0,"spanningNextCpi":0,"quoteStalePositions":[],"maxQuoteAgeMin":0}
 {"ts":"2026-11-17T14:55:10.328Z","cmd":"autopilot","ok":true,"durationMs":203520,"equity":1759.82,"openPositions":0}
+{"ts":"2026-11-17T19:46:13.975Z","cmd":"manage","ok":true,"durationMs":29,"equity":1759.82,"openPositions":0}
