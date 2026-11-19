@@ -212,3 +212,5 @@
 {"ts":"2026-11-18T14:51:14.559Z","cmd":"exposure","phase":"pre-fill","netDeltaDollars":0,"netDeltaPctOfEquity":0,"netThetaPerDay":null,"netVega":null,"positions":0,"bullish":0,"bearish":0,"nextFomc":"2026-12-09","nextCpi":"2026-12-10","spanningNextFomc":0,"spanningNextCpi":0,"quoteStalePositions":[],"maxQuoteAgeMin":0}
 {"ts":"2026-11-18T14:54:30.722Z","cmd":"autopilot","ok":true,"durationMs":196221,"equity":1759.82,"openPositions":0}
 {"ts":"2026-11-18T19:45:57.920Z","cmd":"manage","ok":true,"durationMs":66,"equity":1759.82,"openPositions":0}
+{"ts":"2026-11-19T14:50:47.848Z","cmd":"exposure","phase":"pre-fill","netDeltaDollars":0,"netDeltaPctOfEquity":0,"netThetaPerDay":null,"netVega":null,"positions":0,"bullish":0,"bearish":0,"nextFomc":"2026-12-09","nextCpi":"2026-12-10","spanningNextFomc":0,"spanningNextCpi":0,"quoteStalePositions":[],"maxQuoteAgeMin":0}
+{"ts":"2026-11-19T14:54:04.974Z","cmd":"autopilot","ok":true,"durationMs":197382,"equity":1759.82,"openPositions":0}
